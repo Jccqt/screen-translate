@@ -250,9 +250,7 @@ public partial class MainForm : Form
 
         var inputs = new TableLayoutPanel
         {
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             ColumnCount = 2,
-            Location = new Point(347, 20),
             RowCount = 2,
             Size = new Size(380, 108)
         };
@@ -265,6 +263,7 @@ public partial class MainForm : Form
         inputs.Controls.Add(source, 0, 1);
         inputs.Controls.Add(target, 1, 1);
         section.Controls.Add(inputs);
+        PositionRight(section, inputs, 380, 20);
         return section;
     }
 
@@ -277,9 +276,7 @@ public partial class MainForm : Form
 
         var choices = new FlowLayoutPanel
         {
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
             FlowDirection = FlowDirection.LeftToRight,
-            Location = new Point(407, 35),
             Size = new Size(320, 38),
             WrapContents = false
         };
@@ -287,6 +284,7 @@ public partial class MainForm : Form
         choices.Controls.Add(CreateThemeButton("Light", false));
         choices.Controls.Add(CreateThemeButton("Dark", false));
         section.Controls.Add(choices);
+        PositionRight(section, choices, 320, 35);
         return section;
     }
 
@@ -296,19 +294,19 @@ public partial class MainForm : Form
             "Shortcut",
             "Press these keys anywhere to start selecting a region.",
             108);
-        section.Controls.Add(new Label
+        var shortcut = new Label
         {
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
             BackColor = Color.FromArgb(247, 247, 250),
             BorderStyle = BorderStyle.FixedSingle,
             Cursor = Cursors.Hand,
             Font = new Font("Segoe UI Semibold", 10F),
             ForeColor = Ink,
-            Location = new Point(527, 34),
             Size = new Size(200, 40),
             Text = "Ctrl  +  Shift  +  T",
             TextAlign = ContentAlignment.MiddleCenter
-        });
+        };
+        section.Controls.Add(shortcut);
+        PositionRight(section, shortcut, 200, 34);
         return section;
     }
 
@@ -321,9 +319,7 @@ public partial class MainForm : Form
 
         var modelList = new TableLayoutPanel
         {
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             ColumnCount = 2,
-            Location = new Point(347, 19),
             RowCount = 3,
             Size = new Size(380, 114)
         };
@@ -352,6 +348,7 @@ public partial class MainForm : Form
         };
         modelList.Controls.Add(manageButton, 1, 2);
         section.Controls.Add(modelList);
+        PositionRight(section, modelList, 380, 19);
         return section;
     }
 
@@ -392,6 +389,21 @@ public partial class MainForm : Form
         Margin = new Padding(3, 4, 8, 0),
         Text = text
     };
+
+    private static void PositionRight(Control parent, Control child, int width, int top)
+    {
+        void Reposition()
+        {
+            child.SetBounds(
+                Math.Max(300, parent.ClientSize.Width - width - 25),
+                top,
+                width,
+                child.Height);
+        }
+
+        parent.Resize += (_, _) => Reposition();
+        Reposition();
+    }
 
     private static ComboBox CreateComboBox(object[] choices)
     {
