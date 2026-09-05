@@ -4,7 +4,7 @@ using screen_translate;
 using screen_translate.Ocr;
 using screen_translate.Settings;
 
-internal static class Program
+internal static partial class Program
 {
     private static int _passed;
     private static readonly string Root = Path.Combine(Path.GetTempPath(), "ScreenTranslateTests-" + Guid.NewGuid().ToString("N"));
@@ -21,6 +21,8 @@ internal static class Program
         {
             TestCatalog();
             TestSettings();
+            TestTranslationCatalog();
+            TestTargetSettings();
             RunUiTests(args.FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "Artifacts"));
             Console.WriteLine($"PASS: {_passed} assertions, including WinForms integration and layout checks.");
             return 0;
@@ -92,7 +94,9 @@ internal static class Program
         string data = NewFolder("ui-data");
         var store = new SourceLanguageSettingsStore(Path.Combine(Root, "ui-settings.json"));
         store.Save(new SourceLanguageSettings(data, null));
-        using var form = new MainForm(store);
+        var targetStore = new TargetLanguageSettingsStore(Path.Combine(Root, "ui-target-settings.json"));
+        targetStore.Save(new TargetLanguageSettings(NewFolder("ui-translation-models"), "es"));
+        using var form = new MainForm(store, targetStore);
         Exception? failure = null;
         form.Shown += async (_, _) =>
         {
@@ -115,12 +119,13 @@ internal static class Program
                 Check(store.Load(out _).SourceLanguageCode == "jpn", "Dropdown change persists immediately");
                 await form.RefreshSourceLanguagesAsync();
                 Check(form.SelectedSourceLanguageCode == "jpn", "Refresh preserves current installed selection");
-                using (var reopened = new MainForm(store))
+                using (var reopened = new MainForm(store, targetStore))
                 {
                     await reopened.RefreshSourceLanguagesAsync();
                     Check(reopened.SelectedSourceLanguageCode == "jpn", "New form restores saved source language");
                 }
                 Capture(form, artifactDirectory, "installed-default");
+                await TestTargetLanguageUi(form, store, targetStore, artifactDirectory);
                 foreach (Size size in new[] { new Size(900, 650), new Size(1280, 850) })
                 {
                     form.Size = size;
@@ -153,7 +158,7 @@ internal static class Program
                 await pending;
                 var invalidStore = new SourceLanguageSettingsStore(Path.Combine(Root, "invalid-ui.json"));
                 invalidStore.Save(new SourceLanguageSettings(Path.Combine(data, "eng.traineddata"), "eng"));
-                using (var invalidForm = new MainForm(invalidStore))
+                using (var invalidForm = new MainForm(invalidStore, targetStore))
                 {
                     await invalidForm.RefreshSourceLanguagesAsync();
                     Check(!Find<ComboBox>(invalidForm, "SourceLanguage").Enabled && invalidForm.SelectedSourceLanguageCode is null,
@@ -181,7 +186,7 @@ internal static class Program
                 Check(!scrollable.HorizontalScroll.Visible, "Settings page needs no horizontal scrolling");
             }
             // Page scrolling is intentional; its cards must still fit horizontally.
-            if (child.Name is "LanguageInputs" or "OcrFolderActions" || child is ComboBox || parent.Name == "OcrFolderActions")
+            if (child.Name is "LanguageInputs" or "OcrFolderActions" or "TranslationFolderActions" or "TargetLanguageStatus" or "TargetSettingsError" || child is ComboBox || parent.Name is "OcrFolderActions" or "TranslationFolderActions")
                 Check(child.Left >= 0 && child.Right <= parent.ClientSize.Width && child.Bottom <= parent.ClientSize.Height,
                     $"{child.Name} fits at {parent.ClientSize}");
             AssertLayout(child);

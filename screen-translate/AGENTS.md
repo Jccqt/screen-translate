@@ -56,5 +56,10 @@ Treat these as future possibilities, not implicit implementation requirements.
 
 - Preserve the offline-first and privacy-first behavior when making changes.
 - Avoid expanding Version 1.0 beyond the requirements above without explicit user direction.
+- Keep target-language selection available even when its model is missing, and persist the selection using stable language codes.
+- Determine translation-model availability for the selected source-to-target direction. Recheck when either language or the model folder changes, on explicit refresh, and when the app regains focus. Treat identical languages as requiring no translation model.
+- Keep model discovery separate from the UI and translation engine. Document the supported on-disk format; file discovery does not establish engine compatibility. Do not label unreadable or incomplete packages as installed, and distinguish scan errors from missing models.
+- Preserve existing settings when adding new preferences. Show recoverable load/save errors without crashing or silently changing unrelated preferences.
 - Build the project with `dotnet build` after relevant code changes.
 - Add focused tests for non-UI logic and manually verify global hotkeys, region capture, overlays, multi-monitor behavior, and DPI scaling when those features are changed.
+- Run the acceptance harness with `dotnet run --project Tests/ScreenTranslate.Tests.csproj -- Tests/Artifacts`. Use temporary settings and model-discovery fixtures; never modify a user's installed models or imply fixtures verify actual translation. Report automated, rendered-UI, and physical-desktop verification separately.

@@ -2,6 +2,7 @@ using System.Drawing.Drawing2D;
 using System.ComponentModel;
 using screen_translate.Ocr;
 using screen_translate.Settings;
+using screen_translate.Translation;
 
 namespace screen_translate;
 
@@ -38,13 +39,20 @@ public partial class MainForm : Form
 
     public MainForm() : this(SourceLanguageSettingsStore.CreateDefault()) { }
 
-    public MainForm(SourceLanguageSettingsStore settingsStore)
+    public MainForm(SourceLanguageSettingsStore settingsStore) : this(settingsStore, TargetLanguageSettingsStore.CreateDefault()) { }
+
+    public MainForm(SourceLanguageSettingsStore settingsStore, TargetLanguageSettingsStore targetSettingsStore,
+        ITranslationModelCatalog? translationCatalog = null)
     {
         _settingsStore = settingsStore;
         _sourceSettings = _settingsStore.Load(out string? error);
+        _targetSettingsStore = targetSettingsStore;
+        _targetSettings = targetSettingsStore.Load(out string? targetError);
+        _translationCatalog = translationCatalog ?? new ArgosTranslationModelCatalog();
         InitializeComponent();
         BuildInterface();
         _settingsError.Text = error ?? "";
+        _targetSettingsError.Text = targetError ?? "";
         Shown += async (_, _) => await RefreshSourceLanguagesAsync();
         Activated += async (_, _) => await RefreshSourceLanguagesAsync();
     }
@@ -269,7 +277,7 @@ public partial class MainForm : Form
     {
         var section = CreateSection(
             "Language",
-            "Select an installed OCR language for the text on your screen.",
+            "Choose the screen text language and your translation output language.",
             300);
 
         _sourceLanguage = CreateComboBox([]);
@@ -277,11 +285,16 @@ public partial class MainForm : Form
         _sourceLanguage.AccessibleName = "Source language";
         _sourceLanguage.Enabled = false;
         _sourceLanguage.SelectedIndexChanged += SourceLanguageChanged;
-        var target = CreateComboBox(new[]
+        _targetLanguage = CreateComboBox(TranslationLanguage.All.Cast<object>().ToArray());
+        _targetLanguage.Name = "TargetLanguage";
+        _targetLanguage.AccessibleName = "Translation output language";
+        _targetLanguage.SelectedItem = TranslationLanguage.Resolve(_targetSettings.TargetLanguageCode);
+        _targetLanguage.SelectedIndexChanged += async (_, _) =>
         {
-            "English", "Spanish", "French", "German", "Japanese", "Korean", "Filipino"
-        });
-        target.SelectedIndex = 1;
+            _targetSettings = _targetSettings with { TargetLanguageCode = SelectedTargetLanguageCode };
+            SaveTargetSettings();
+            await RefreshTranslationModelsAsync();
+        };
 
         var inputs = new TableLayoutPanel
         {
@@ -297,7 +310,7 @@ public partial class MainForm : Form
         inputs.Controls.Add(CreateInputLabel("SOURCE LANGUAGE (OCR)"), 0, 0);
         inputs.Controls.Add(CreateInputLabel("TRANSLATE TO"), 1, 0);
         inputs.Controls.Add(_sourceLanguage, 0, 1);
-        inputs.Controls.Add(target, 1, 1);
+        inputs.Controls.Add(_targetLanguage, 1, 1);
         section.Controls.Add(inputs);
         _sourceStatus = new Label { Name = "SourceLanguageStatus", ForeColor = Muted, Text = "Checking installed OCR languages…" };
         _dataFolder = new Label { Name = "OcrDataFolder", ForeColor = Muted, AutoEllipsis = true };
@@ -323,6 +336,7 @@ public partial class MainForm : Form
         actions.Controls.Add(folderButton);
         actions.Controls.Add(refreshButton);
         section.Controls.AddRange([_sourceStatus, _dataFolder, actions, _settingsError]);
+        var translationActions = CreateTranslationModelControls(section);
         void LayoutLanguages()
         {
             int U(int value) => LogicalToDeviceUnits(value);
@@ -333,10 +347,16 @@ public partial class MainForm : Form
             _dataFolder.SetBounds(U(25), U(198), width, U(22));
             actions.SetBounds(U(22), U(224), width, U(34));
             _settingsError.SetBounds(U(25), U(263), width, U(36));
-            section.Height = U(string.IsNullOrEmpty(_settingsError.Text) ? 268 : 310);
+            int targetTop = string.IsNullOrEmpty(_settingsError.Text) ? 268 : 310;
+            _targetStatus.SetBounds(U(25), U(targetTop), width, U(64));
+            _translationFolder.SetBounds(U(25), U(targetTop + 68), width, U(22));
+            translationActions.SetBounds(U(22), U(targetTop + 94), width, U(34));
+            _targetSettingsError.SetBounds(U(25), U(targetTop + 132), width, U(string.IsNullOrEmpty(_targetSettingsError.Text) ? 0 : 42));
+            section.Height = U(targetTop + (string.IsNullOrEmpty(_targetSettingsError.Text) ? 136 : 182));
         }
         section.Resize += (_, _) => LayoutLanguages();
         _settingsError.TextChanged += (_, _) => LayoutLanguages();
+        _targetSettingsError.TextChanged += (_, _) => LayoutLanguages();
         LayoutLanguages();
         return section;
     }
@@ -345,6 +365,7 @@ public partial class MainForm : Form
     {
         int version = ++_refreshVersion;
         _sourceLanguage.Enabled = false;
+        UpdateTranslationModelStatus();
         string directory = OcrDataDirectory;
         _dataFolder.Text = $"OCR data: {directory}";
         _dataFolder.AccessibleDescription = directory;
@@ -377,13 +398,15 @@ public partial class MainForm : Form
             _sourceSettings = _sourceSettings with { SourceLanguageCode = selected?.Code };
             SaveSourceSettings();
         }
+        await RefreshTranslationModelsAsync();
     }
 
-    private void SourceLanguageChanged(object? sender, EventArgs e)
+    private async void SourceLanguageChanged(object? sender, EventArgs e)
     {
         if (_bindingLanguages) return;
         _sourceSettings = _sourceSettings with { SourceLanguageCode = SelectedSourceLanguageCode };
         SaveSourceSettings();
+        await RefreshTranslationModelsAsync();
     }
 
     private void SaveSourceSettings() => _settingsError.Text = _settingsStore.Save(_sourceSettings) ?? "";
@@ -453,7 +476,9 @@ public partial class MainForm : Form
         _ocrModelStatus = CreateModelStatus();
         modelList.Controls.Add(_ocrModelStatus, 1, 0);
         modelList.Controls.Add(CreateModelName("Translation model"), 0, 1);
-        modelList.Controls.Add(CreateModelStatus(), 1, 1);
+        _translationModelStatus = CreateModelStatus();
+        _translationModelStatus.Name = "TranslationModelStatus";
+        modelList.Controls.Add(_translationModelStatus, 1, 1);
 
         var manageButton = new PillButton
         {
