@@ -1,5 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.ComponentModel;
+using screen_translate.Ocr;
+using screen_translate.Settings;
 
 namespace screen_translate;
 
@@ -14,12 +16,37 @@ public partial class MainForm : Form
     private static readonly Color AccentSoft = Color.FromArgb(239, 238, 252);
 
     private readonly List<PillButton> _themeButtons = [];
-    private FlowLayoutPanel _page = null!;
+    private Panel _page = null!;
+    private RoundedPanel _settingsSurface = null!;
+    private ComboBox _sourceLanguage = null!;
+    private Label _sourceStatus = null!;
+    private Label _dataFolder = null!;
+    private Label _ocrModelStatus = null!;
+    private Label _settingsError = null!;
+    private readonly OcrLanguageCatalog _languageCatalog = new();
+    private readonly SourceLanguageSettingsStore _settingsStore;
+    private SourceLanguageSettings _sourceSettings;
+    private int _refreshVersion;
+    private bool _bindingLanguages;
 
-    public MainForm()
+    // The OCR pipeline must use this exact code and data directory when initializing Tesseract.
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string? SelectedSourceLanguageCode => _sourceLanguage.Enabled ? (_sourceLanguage.SelectedItem as OcrLanguage)?.Code : null;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string OcrDataDirectory => _sourceSettings.OcrDataDirectory;
+
+    public MainForm() : this(SourceLanguageSettingsStore.CreateDefault()) { }
+
+    public MainForm(SourceLanguageSettingsStore settingsStore)
     {
+        _settingsStore = settingsStore;
+        _sourceSettings = _settingsStore.Load(out string? error);
         InitializeComponent();
         BuildInterface();
+        _settingsError.Text = error ?? "";
+        Shown += async (_, _) => await RefreshSourceLanguagesAsync();
+        Activated += async (_, _) => await RefreshSourceLanguagesAsync();
     }
 
     private void BuildInterface()
@@ -32,6 +59,7 @@ public partial class MainForm : Form
         BackColor = Canvas;
         Font = new Font("Segoe UI", 9F);
         AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96F, 96F);
 
         var layout = new TableLayoutPanel
         {
@@ -72,7 +100,7 @@ public partial class MainForm : Form
         brand.Controls.Add(new Label
         {
             AutoSize = true,
-            Font = new Font("Segoe UI Semibold", 11.5F, FontStyle.Bold),
+            Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
             ForeColor = Ink,
             Location = new Point(51, 8),
             Text = "Screen Translate"
@@ -151,15 +179,13 @@ public partial class MainForm : Form
             Padding = new Padding(46, 35, 46, 34)
         };
 
-        _page = new FlowLayoutPanel
+        _page = new Panel
         {
             AutoScroll = true,
             BackColor = Canvas,
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
             Margin = Padding.Empty,
-            Padding = Padding.Empty,
-            WrapContents = false
+            Padding = Padding.Empty
         };
         _page.Controls.Add(CreatePageHeader());
         _page.Controls.Add(CreateSettingsSurface());
@@ -206,6 +232,7 @@ public partial class MainForm : Form
             Height = 520,
             Margin = Padding.Empty
         };
+        _settingsSurface = surface;
 
         AddDockedTop(surface, CreateModelsSection());
         AddDockedTop(surface, CreateDivider());
@@ -214,7 +241,15 @@ public partial class MainForm : Form
         AddDockedTop(surface, CreateAppearanceSection());
         AddDockedTop(surface, CreateDivider());
         AddDockedTop(surface, CreateLanguageSection());
+        foreach (Control child in surface.Controls)
+            child.SizeChanged += (_, _) => ResizeSettingsSurface();
+        ResizeSettingsSurface();
         return surface;
+    }
+
+    private void ResizeSettingsSurface()
+    {
+        _settingsSurface.Height = _settingsSurface.Controls.Cast<Control>().Sum(control => control.Height) + LogicalToDeviceUnits(8);
     }
 
     private static void AddDockedTop(Control parent, Control child)
@@ -234,14 +269,14 @@ public partial class MainForm : Form
     {
         var section = CreateSection(
             "Language",
-            "Choose the text language and where it should be translated.",
-            150);
+            "Select an installed OCR language for the text on your screen.",
+            300);
 
-        var source = CreateComboBox(new[]
-        {
-            "English", "Spanish", "French", "German", "Japanese", "Korean"
-        });
-        source.SelectedIndex = 0;
+        _sourceLanguage = CreateComboBox([]);
+        _sourceLanguage.Name = "SourceLanguage";
+        _sourceLanguage.AccessibleName = "Source language";
+        _sourceLanguage.Enabled = false;
+        _sourceLanguage.SelectedIndexChanged += SourceLanguageChanged;
         var target = CreateComboBox(new[]
         {
             "English", "Spanish", "French", "German", "Japanese", "Korean", "Filipino"
@@ -252,20 +287,106 @@ public partial class MainForm : Form
         {
             ColumnCount = 2,
             RowCount = 2,
-            Size = new Size(380, 108)
+            Name = "LanguageInputs",
+            Size = new Size(380, 66)
         };
         inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         inputs.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));
         inputs.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
-        inputs.Controls.Add(CreateInputLabel("SCREEN TEXT"), 0, 0);
+        inputs.Controls.Add(CreateInputLabel("SOURCE LANGUAGE (OCR)"), 0, 0);
         inputs.Controls.Add(CreateInputLabel("TRANSLATE TO"), 1, 0);
-        inputs.Controls.Add(source, 0, 1);
+        inputs.Controls.Add(_sourceLanguage, 0, 1);
         inputs.Controls.Add(target, 1, 1);
         section.Controls.Add(inputs);
-        PositionRight(section, inputs, 380, 20);
+        _sourceStatus = new Label { Name = "SourceLanguageStatus", ForeColor = Muted, Text = "Checking installed OCR languages…" };
+        _dataFolder = new Label { Name = "OcrDataFolder", ForeColor = Muted, AutoEllipsis = true };
+        _settingsError = new Label { Name = "SourceSettingsError", ForeColor = Color.FromArgb(160, 65, 35) };
+        var folderButton = new Button { Text = "Choose OCR folder…", AutoSize = true, AccessibleName = "Choose OCR data folder" };
+        var refreshButton = new Button { Text = "Refresh languages", AutoSize = true };
+        folderButton.Click += async (_, _) =>
+        {
+            using var dialog = new FolderBrowserDialog
+            {
+                Description = "Select the tessdata folder containing your installed .traineddata language files.",
+                UseDescriptionForTitle = true,
+                SelectedPath = OcrDataDirectory,
+                ShowNewFolderButton = false
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            _sourceSettings = _sourceSettings with { OcrDataDirectory = dialog.SelectedPath };
+            SaveSourceSettings();
+            await RefreshSourceLanguagesAsync();
+        };
+        refreshButton.Click += async (_, _) => await RefreshSourceLanguagesAsync();
+        var actions = new FlowLayoutPanel { Name = "OcrFolderActions", WrapContents = false };
+        actions.Controls.Add(folderButton);
+        actions.Controls.Add(refreshButton);
+        section.Controls.AddRange([_sourceStatus, _dataFolder, actions, _settingsError]);
+        void LayoutLanguages()
+        {
+            int U(int value) => LogicalToDeviceUnits(value);
+            int width = Math.Max(0, section.ClientSize.Width - U(50));
+            section.Controls.Find("SectionDescription", false)[0].Width = width;
+            inputs.SetBounds(U(25), U(92), width, U(66));
+            _sourceStatus.SetBounds(U(25), U(157), width, U(38));
+            _dataFolder.SetBounds(U(25), U(198), width, U(22));
+            actions.SetBounds(U(22), U(224), width, U(34));
+            _settingsError.SetBounds(U(25), U(263), width, U(36));
+            section.Height = U(string.IsNullOrEmpty(_settingsError.Text) ? 268 : 310);
+        }
+        section.Resize += (_, _) => LayoutLanguages();
+        _settingsError.TextChanged += (_, _) => LayoutLanguages();
+        LayoutLanguages();
         return section;
     }
+
+    public async Task RefreshSourceLanguagesAsync()
+    {
+        int version = ++_refreshVersion;
+        _sourceLanguage.Enabled = false;
+        string directory = OcrDataDirectory;
+        _dataFolder.Text = $"OCR data: {directory}";
+        _dataFolder.AccessibleDescription = directory;
+        _sourceStatus.Text = "Checking installed OCR languages…";
+        OcrLanguageScan scan = await Task.Run(() => _languageCatalog.Scan(directory));
+        if (IsDisposed || Disposing || version != _refreshVersion) return;
+
+        string? previousCode = _sourceSettings.SourceLanguageCode;
+        OcrLanguage? selected = OcrLanguageCatalog.ResolveSelection(scan.Languages, previousCode);
+        _bindingLanguages = true;
+        try
+        {
+            _sourceLanguage.Items.Clear();
+            _sourceLanguage.Items.AddRange(scan.Languages.Cast<object>().ToArray());
+            _sourceLanguage.SelectedItem = selected;
+        }
+        finally { _bindingLanguages = false; }
+        _sourceLanguage.Enabled = scan.Languages.Count > 0;
+        _ocrModelStatus.Text = selected is null ? "●  Not installed" : "●  Installed";
+        _ocrModelStatus.ForeColor = selected is null ? Color.FromArgb(173, 104, 27) : Color.FromArgb(45, 112, 72);
+        bool selectionChanged = previousCode is not null && selected?.Code != previousCode;
+        _sourceStatus.Text = scan.Error ?? (selected is null
+            ? "No OCR languages installed. Choose a folder containing .traineddata files, then refresh."
+            : selectionChanged
+                ? $"Previous language is unavailable. Selected {selected}."
+                : $"{scan.Languages.Count} installed OCR language(s). Choose the language of your screen text.");
+        // Preserve the saved preference on a temporary folder access error.
+        if (scan.Error is null && selected?.Code != previousCode)
+        {
+            _sourceSettings = _sourceSettings with { SourceLanguageCode = selected?.Code };
+            SaveSourceSettings();
+        }
+    }
+
+    private void SourceLanguageChanged(object? sender, EventArgs e)
+    {
+        if (_bindingLanguages) return;
+        _sourceSettings = _sourceSettings with { SourceLanguageCode = SelectedSourceLanguageCode };
+        SaveSourceSettings();
+    }
+
+    private void SaveSourceSettings() => _settingsError.Text = _settingsStore.Save(_sourceSettings) ?? "";
 
     private Control CreateAppearanceSection()
     {
@@ -329,7 +450,8 @@ public partial class MainForm : Form
         modelList.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
         modelList.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));
         modelList.Controls.Add(CreateModelName("OCR model"), 0, 0);
-        modelList.Controls.Add(CreateModelStatus(), 1, 0);
+        _ocrModelStatus = CreateModelStatus();
+        modelList.Controls.Add(_ocrModelStatus, 1, 0);
         modelList.Controls.Add(CreateModelName("Translation model"), 0, 1);
         modelList.Controls.Add(CreateModelStatus(), 1, 1);
 
@@ -370,7 +492,7 @@ public partial class MainForm : Form
         });
         section.Controls.Add(new Label
         {
-            AutoEllipsis = true,
+            Name = "SectionDescription",
             Font = new Font("Segoe UI", 8.8F),
             ForeColor = Muted,
             Location = new Point(25, 51),
@@ -390,15 +512,18 @@ public partial class MainForm : Form
         Text = text
     };
 
-    private static void PositionRight(Control parent, Control child, int width, int top)
+    private void PositionRight(Control parent, Control child, int width, int top)
     {
         void Reposition()
         {
+            int U(int value) => LogicalToDeviceUnits(value);
+            bool stacked = parent.ClientSize.Width < U(325 + width);
             child.SetBounds(
-                Math.Max(300, parent.ClientSize.Width - width - 25),
-                top,
-                width,
+                stacked ? U(25) : parent.ClientSize.Width - U(width + 25),
+                U(stacked ? 100 : top),
+                Math.Min(U(width), Math.Max(0, parent.ClientSize.Width - U(50))),
                 child.Height);
+            parent.Height = Math.Max(U(stacked ? 100 : 0) + child.Height + U(20), U(top * 2) + child.Height);
         }
 
         parent.Resize += (_, _) => Reposition();
@@ -460,11 +585,17 @@ public partial class MainForm : Form
 
     private void Page_Resize(object? sender, EventArgs e)
     {
-        int width = Math.Max(600, _page.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2);
+        int width = Math.Max(0, _page.ClientSize.Width - LogicalToDeviceUnits(2));
+        int top = _page.AutoScrollPosition.Y;
         foreach (Control control in _page.Controls)
         {
-            control.Width = width;
+            control.SetBounds(0, top, width, control.Height);
+            top += control.Height + control.Margin.Bottom;
         }
+        // ScrollableControl calculates its scroll range before Resize handlers run.
+        // Recalculate after the responsive sections have settled at their new sizes.
+        if (_page.IsHandleCreated)
+            _page.BeginInvoke((Action)(() => { if (!_page.IsDisposed) _page.PerformLayout(); }));
     }
 
     private void ThemeButton_Click(object? sender, EventArgs e)
