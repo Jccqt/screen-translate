@@ -31,11 +31,13 @@ public partial class MainForm
 
     private FlowLayoutPanel CreateTranslationModelControls(Control section)
     {
-        _targetStatus = new Label { Name = "TargetLanguageStatus", ForeColor = Muted, Text = "Checking local translation models…" };
-        _translationFolder = new Label { Name = "TranslationModelFolder", ForeColor = Muted, AutoEllipsis = true };
-        _targetSettingsError = new Label { Name = "TargetSettingsError", ForeColor = Color.FromArgb(160, 65, 35) };
-        var folder = new Button { Text = "Choose translation folder…", AutoSize = true, AccessibleName = "Choose translation model folder" };
-        var refresh = new Button { Text = "Refresh models", AutoSize = true, Name = "RefreshTranslationModels" };
+        _targetStatus = TextLabel("Checking local translation models…", 9.5F, muted: true);
+        _targetStatus.Name = "TargetLanguageStatus";
+        _translationFolder = FolderLabel("TranslationModelFolder");
+        _targetSettingsError = ErrorLabel("TargetSettingsError");
+        var folder = ActionButton("Choose folder…", "ChooseTranslationFolder");
+        folder.AccessibleName = "Choose translation model folder";
+        var refresh = ActionButton("Refresh models", "RefreshTranslationModels");
         folder.Click += async (_, _) =>
         {
             using var dialog = new FolderBrowserDialog
@@ -49,7 +51,7 @@ public partial class MainForm
                 await SetTranslationModelDirectoryAsync(dialog.SelectedPath);
         };
         refresh.Click += async (_, _) => await RefreshTranslationModelsAsync();
-        var actions = new FlowLayoutPanel { Name = "TranslationFolderActions", WrapContents = false };
+        var actions = new FlowLayoutPanel { Name = "TranslationFolderActions", WrapContents = false, BackColor = Color.Transparent };
         actions.Controls.AddRange([folder, refresh]);
         section.Controls.AddRange([_targetStatus, _translationFolder, actions, _targetSettingsError]);
         return actions;
@@ -68,15 +70,21 @@ public partial class MainForm
 
     public async Task RefreshTranslationModelsAsync()
     {
-        if (IsDisposed || Disposing) return;
+        if (_lifetime.IsStopped || IsDisposed || Disposing) return;
         int version = ++_translationRefreshVersion;
         string directory = TranslationModelDirectory;
-        _translationFolder.Text = $"Translation models: {directory}";
+        _translationFolder.Text = directory;
         _translationFolder.AccessibleDescription = directory;
         _checkingTranslationModels = true;
         UpdateTranslationModelStatus();
-        var scan = await Task.Run(() => _translationCatalog.Scan(directory));
-        if (IsDisposed || Disposing || version != _translationRefreshVersion) return;
+        TranslationModelScan scan;
+        try { scan = await Task.Run(() => _translationCatalog.Scan(directory, WorkCancellationToken), WorkCancellationToken).WaitAsync(WorkCancellationToken); }
+        catch (OperationCanceledException) when (WorkCancellationToken.IsCancellationRequested) { return; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            scan = new([], "Cannot check the translation models. Choose an accessible model folder and refresh.");
+        }
+        if (_lifetime.IsStopped || IsDisposed || Disposing || version != _translationRefreshVersion) return;
         _translationScan = scan;
         _checkingTranslationModels = false;
         UpdateTranslationModelStatus();
@@ -84,6 +92,7 @@ public partial class MainForm
 
     private void UpdateTranslationModelStatus()
     {
+        UpdateReadiness();
         if (_checkingTranslationModels)
         {
             _translationModelStatus.Text = "●  Checking…";
@@ -106,7 +115,7 @@ public partial class MainForm
             message += $" Skipped {_translationScan.IgnoredPackages} incomplete or unreadable package(s).";
         _translationModelStatus.Text = $"●  {badge}";
         _translationModelStatus.ForeColor = availability.State is TranslationModelState.Installed or TranslationModelState.NotRequired
-            ? Color.FromArgb(45, 112, 72) : Color.FromArgb(173, 104, 27);
+            ? ModelGoodColor : ModelWarningColor;
         _targetStatus.Text = message;
         _targetStatus.AccessibleDescription = message;
     }

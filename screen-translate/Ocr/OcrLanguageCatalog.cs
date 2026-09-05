@@ -14,14 +14,16 @@ public sealed class OcrLanguageCatalog
 {
     private static readonly Dictionary<string, string> Names = CreateNames();
 
-    public OcrLanguageScan Scan(string dataDirectory)
+    public OcrLanguageScan Scan(string dataDirectory, CancellationToken cancellationToken = default)
     {
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // Enumerate directly: Directory.Exists would conceal access errors as a missing folder.
             var languages = new List<OcrLanguage>();
             foreach (string path in Directory.EnumerateFiles(dataDirectory, "*", SearchOption.TopDirectoryOnly))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!string.Equals(Path.GetExtension(path), ".traineddata", StringComparison.OrdinalIgnoreCase))
                     continue;
 

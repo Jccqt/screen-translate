@@ -8,19 +8,28 @@ public sealed record TranslationModelScan(IReadOnlyList<TranslationModel> Models
 public interface ITranslationModelCatalog
 {
     TranslationModelScan Scan(string directory);
+    TranslationModelScan Scan(string directory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Scan(directory);
+    }
 }
 
 /// <summary>Discovers extracted, direct-pair Argos packages. The engine must validate models when loading.</summary>
 public sealed class ArgosTranslationModelCatalog : ITranslationModelCatalog
 {
-    public TranslationModelScan Scan(string directory)
+    public TranslationModelScan Scan(string directory) => Scan(directory, CancellationToken.None);
+
+    public TranslationModelScan Scan(string directory, CancellationToken cancellationToken)
     {
         var models = new List<TranslationModel>();
         int ignored = 0;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             foreach (string package in System.IO.Directory.EnumerateDirectories(directory).Order(StringComparer.OrdinalIgnoreCase))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
                     using var metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(package, "metadata.json")));

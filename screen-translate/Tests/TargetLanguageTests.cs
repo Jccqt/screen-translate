@@ -96,7 +96,7 @@ internal static partial class Program
         await form.RefreshTranslationModelsAsync();
         Check(badge.Text.Contains("Installed") && form.SelectedTranslationModel?.Directory == package, "Installed pair updates badge and exposes package");
         Capture(form, artifactDirectory, "target-installed");
-        using (var reopened = new MainForm(sourceStore, targetStore))
+        using (var reopened = CreateMainForm(sourceStore, targetStore))
         {
             await reopened.RefreshSourceLanguagesAsync();
             Check(reopened.SelectedTargetLanguageCode == "fr" && reopened.SelectedTranslationModel?.Directory == package, "Restart restores target and recomputes model status");
@@ -126,7 +126,7 @@ internal static partial class Program
         await TestTranslationRefreshOrdering(sourceStore, targetStore);
         string blockedPath = Path.Combine(Root, "blocked-target-parent");
         File.WriteAllText(blockedPath, "not a directory");
-        using var blockedForm = new MainForm(sourceStore, new TargetLanguageSettingsStore(Path.Combine(blockedPath, "settings.json")));
+        using var blockedForm = CreateMainForm(sourceStore, new TargetLanguageSettingsStore(Path.Combine(blockedPath, "settings.json")));
         Find<ComboBox>(blockedForm, "TargetLanguage").SelectedItem = TranslationLanguage.Resolve("de");
         await blockedForm.RefreshTranslationModelsAsync();
         Check(Find<Label>(blockedForm, "TargetSettingsError").Text.Contains("Could not save") && blockedForm.SelectedTargetLanguageCode == "de",
@@ -136,7 +136,7 @@ internal static partial class Program
     private static async Task TestTranslationRefreshOrdering(SourceLanguageSettingsStore sourceStore, TargetLanguageSettingsStore targetStore)
     {
         var catalog = new ControlledCatalog();
-        using var form = new MainForm(sourceStore, targetStore, catalog);
+        using var form = CreateMainForm(sourceStore, targetStore, catalog);
         await form.RefreshSourceLanguagesAsync();
         catalog.DelayNext = true;
         var stale = form.RefreshTranslationModelsAsync();

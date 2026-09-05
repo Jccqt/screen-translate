@@ -23,7 +23,11 @@ internal static partial class Program
             TestSettings();
             TestTranslationCatalog();
             TestTargetSettings();
+            TestInterfaceSettingsAndReadiness();
+            TestLifetime();
+            TestNativeShortcut();
             RunUiTests(args.FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "Artifacts"));
+            TestMainMessageLoopExit();
             Console.WriteLine($"PASS: {_passed} assertions, including WinForms integration and layout checks.");
             return 0;
         }
@@ -96,17 +100,20 @@ internal static partial class Program
         store.Save(new SourceLanguageSettings(data, null));
         var targetStore = new TargetLanguageSettingsStore(Path.Combine(Root, "ui-target-settings.json"));
         targetStore.Save(new TargetLanguageSettings(NewFolder("ui-translation-models"), "es"));
-        using var form = new MainForm(store, targetStore);
+        using var form = CreateMainForm(store, targetStore);
         Exception? failure = null;
         form.Shown += async (_, _) =>
         {
             try
             {
                 await form.RefreshSourceLanguagesAsync();
+                Check(form.Visible && form.WindowState != FormWindowState.Minimized, "Launch displays the main interface");
                 var combo = Find<ComboBox>(form, "SourceLanguage");
                 Check(!combo.Enabled && combo.Items.Count == 0 && form.SelectedSourceLanguageCode is null, "Empty source selector is disabled and unselected");
                 Check(Find<Label>(form, "SourceLanguageStatus").Text.Contains("No OCR languages"), "Empty state explains how to install data");
                 Capture(form, artifactDirectory, "empty");
+                TestRedesignedLayout(form);
+                await TestMainInterfaceUi(form, artifactDirectory);
                 Install(data, "eng");
                 Install(data, "jpn");
                 Install(data, "chi_sim");
@@ -119,7 +126,7 @@ internal static partial class Program
                 Check(store.Load(out _).SourceLanguageCode == "jpn", "Dropdown change persists immediately");
                 await form.RefreshSourceLanguagesAsync();
                 Check(form.SelectedSourceLanguageCode == "jpn", "Refresh preserves current installed selection");
-                using (var reopened = new MainForm(store, targetStore))
+                using (var reopened = CreateMainForm(store, targetStore))
                 {
                     await reopened.RefreshSourceLanguagesAsync();
                     Check(reopened.SelectedSourceLanguageCode == "jpn", "New form restores saved source language");
@@ -133,13 +140,24 @@ internal static partial class Program
                     Application.DoEvents();
                     AssertLayout(form);
                     Capture(form, artifactDirectory, $"installed-{size.Width}");
+                    CaptureLowerSettings(form, artifactDirectory, $"main-settings-{size.Width}");
                 }
                 // Deliver the DPI-change notification used by Windows when moving between monitors.
+                float titleFont = Find<Label>(form, "PageTitle").Font.Size;
+                int pickerHeight = Find<ComboBox>(form, "TargetLanguage").ItemHeight;
                 ChangeDpi(form, 144);
                 form.PerformLayout();
                 Application.DoEvents();
                 AssertLayout(form);
+                Check(Math.Abs(Find<Label>(form, "PageTitle").Font.Size / titleFont - 1.5F) < .01F &&
+                    Find<ComboBox>(form, "TargetLanguage").ItemHeight == pickerHeight * 1.5F,
+                    "Typography and dropdown hit areas scale with the 150% layout");
                 Capture(form, artifactDirectory, "scaled-150-percent");
+                CaptureLowerSettings(form, artifactDirectory, "main-settings-150-percent");
+                ChangeDpi(form, 96);
+                Application.DoEvents();
+                Check(Math.Abs(Find<Label>(form, "PageTitle").Font.Size - titleFont) < .01F,
+                    "Returning to 100% restores typography without cumulative scaling");
                 File.Delete(Path.Combine(data, "jpn.traineddata"));
                 await form.RefreshSourceLanguagesAsync();
                 Check(form.SelectedSourceLanguageCode != "jpn" && combo.Items.Count == 2, "Removed selected language cannot remain selected");
@@ -158,7 +176,7 @@ internal static partial class Program
                 await pending;
                 var invalidStore = new SourceLanguageSettingsStore(Path.Combine(Root, "invalid-ui.json"));
                 invalidStore.Save(new SourceLanguageSettings(Path.Combine(data, "eng.traineddata"), "eng"));
-                using (var invalidForm = new MainForm(invalidStore, targetStore))
+                using (var invalidForm = CreateMainForm(invalidStore, targetStore))
                 {
                     await invalidForm.RefreshSourceLanguagesAsync();
                     Check(!Find<ComboBox>(invalidForm, "SourceLanguage").Enabled && invalidForm.SelectedSourceLanguageCode is null,
@@ -186,7 +204,7 @@ internal static partial class Program
                 Check(!scrollable.HorizontalScroll.Visible, "Settings page needs no horizontal scrolling");
             }
             // Page scrolling is intentional; its cards must still fit horizontally.
-            if (child.Name is "LanguageInputs" or "OcrFolderActions" or "TranslationFolderActions" or "TargetLanguageStatus" or "TargetSettingsError" || child is ComboBox || parent.Name is "OcrFolderActions" or "TranslationFolderActions")
+            if (child.Name is "LanguageInputs" or "OcrFolderActions" or "TranslationFolderActions" or "TargetLanguageStatus" or "TargetSettingsError" or "GlobalShortcut" or "ApplyShortcut" or "ShortcutStatus" or "TranslationReadiness" || child is ComboBox || parent.Name is "OcrFolderActions" or "TranslationFolderActions")
                 Check(child.Left >= 0 && child.Right <= parent.ClientSize.Width && child.Bottom <= parent.ClientSize.Height,
                     $"{child.Name} fits at {parent.ClientSize}");
             AssertLayout(child);
@@ -206,7 +224,7 @@ internal static partial class Program
         var rectangle = new NativeRect { Left = bounds.Left, Top = bounds.Top,
             Right = bounds.Left + (int)(bounds.Width * scale), Bottom = bounds.Top + (int)(bounds.Height * scale) };
         SendMessage(form.Handle, 0x02E0, (nuint)(dpi | (dpi << 16)), ref rectangle);
-        Check(form.DeviceDpi == dpi, "Form received the 150% DPI change");
+        Check(form.DeviceDpi == dpi, $"Form received the {dpi} DPI change");
     }
 
     private static void Capture(Form form, string directory, string name)
