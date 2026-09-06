@@ -170,8 +170,10 @@ public partial class MainForm
             _sourceLanguage.SetBounds(U(24), U(85), half, U(38));
             arrow.SetBounds(U(24) + half, U(84), U(44), U(38));
             _targetLanguage.SetBounds(U(68) + half, U(85), half, U(38));
-            _languageHint.SetBounds(U(24), U(137), w - U(48), U(24));
-            languages.Height = U(178);
+            int hintHeight = Math.Max(U(24), TextRenderer.MeasureText(_languageHint.Text, _languageHint.Font,
+                new Size(w - U(48), int.MaxValue), TextFormatFlags.WordBreak).Height + U(4));
+            _languageHint.SetBounds(U(24), U(137), w - U(48), hintHeight);
+            languages.Height = U(154) + hintHeight;
         });
 
         var preferences = Card("PreferencesCard");
@@ -274,14 +276,18 @@ public partial class MainForm
             };
             if (dialog.ShowDialog(this) != DialogResult.OK) return;
             _sourceSettings = _sourceSettings with { OcrDataDirectory = dialog.SelectedPath };
-            SaveSourceSettings();
+            SaveSourceSettings(explicitChoice: true);
             await RefreshSourceLanguagesAsync();
         };
         var refresh = ActionButton("Refresh languages", "RefreshOcrLanguages");
         refresh.Width = 154;
         refresh.Click += async (_, _) => await RefreshSourceLanguagesAsync();
         var ocrActions = new FlowLayoutPanel { Name = "OcrFolderActions", WrapContents = false, BackColor = Color.Transparent };
-        ocrActions.Controls.AddRange([folder, refresh]);
+        _validateOcr = ActionButton("Validate OCR data", "ValidateOcrData");
+        _validateOcr.Width = 166;
+        _validateOcr.Enabled = false;
+        _validateOcr.Click += async (_, _) => await ValidateSelectedOcrLanguageAsync();
+        ocrActions.Controls.AddRange([folder, refresh, _validateOcr]);
         ocr.Controls.AddRange([ocrTitle, ocrDescription, _ocrModelStatus, _sourceStatus, _dataFolder, ocrActions, _settingsError]);
         _modelsPage.Controls.Add(ocr);
 
@@ -301,12 +307,15 @@ public partial class MainForm
             title.SetBounds(U(24), U(19), width - U(180), U(28));
             badge.SetBounds(card.Width - U(206), U(19), U(182), U(28));
             subtitle.SetBounds(U(24), U(51), width, U(24));
-            status.SetBounds(U(24), U(88), width, U(44));
-            path.SetBounds(U(24), U(144), width, U(36));
-            actions.SetBounds(U(24), U(194), width, U(38));
+            int statusHeight = Math.Max(U(44), TextRenderer.MeasureText(status.Text, status.Font,
+                new Size(width, int.MaxValue), TextFormatFlags.WordBreak).Height + U(4));
+            int extraHeight = statusHeight - U(44);
+            status.SetBounds(U(24), U(88), width, statusHeight);
+            path.SetBounds(U(24), U(144) + extraHeight, width, U(36));
+            actions.SetBounds(U(24), U(194) + extraHeight, width, U(38));
             bool hasError = !string.IsNullOrEmpty(error.Text);
-            error.SetBounds(U(24), U(243), width, hasError ? U(44) : 0);
-            card.Height = U(hasError ? 303 : 250);
+            error.SetBounds(U(24), U(243) + extraHeight, width, hasError ? U(44) : 0);
+            card.Height = U(hasError ? 303 : 250) + extraHeight;
         }
         _responsiveLayouts.Add(() => ModelLayout(ocr, ocrTitle, ocrDescription, _ocrModelStatus, _sourceStatus, _dataFolder, ocrActions, _settingsError));
         _responsiveLayouts.Add(() => ModelLayout(translation, translationTitle, translationDescription, _translationModelStatus, _targetStatus, _translationFolder, translationActions, _targetSettingsError));

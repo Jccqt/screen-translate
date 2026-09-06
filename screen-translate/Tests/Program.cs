@@ -21,6 +21,7 @@ internal static partial class Program
         {
             TestCatalog();
             TestSettings();
+            TestOcrModelLoading().GetAwaiter().GetResult();
             TestTranslationCatalog();
             TestTargetSettings();
             TestInterfaceSettingsAndReadiness();
@@ -52,6 +53,7 @@ internal static partial class Program
         Install(data, "osd");
         Install(data, "equ");
         Install(data, "eng+jpn");
+        Install(data, "~eng");
         File.WriteAllText(Path.Combine(data, "fra.traineddata"), "");
         File.WriteAllText(Path.Combine(data, "deu.traineddata.download"), "partial");
         File.WriteAllText(Path.Combine(data, "spa.TRAINEDDATA"), "installed discovery fixture");
@@ -65,7 +67,8 @@ internal static partial class Program
         Check(scan.Languages.Single(x => x.Code == "eng").DisplayName == "English", "Readable language name");
         Check(scan.Languages.Single(x => x.Code == "custom_model").DisplayName == "custom_model", "Custom model remains selectable");
         Check(OcrLanguageCatalog.ResolveSelection(scan.Languages, "JPN")?.Code == "jpn", "Saved selection resolves case insensitively");
-        Check(OcrLanguageCatalog.ResolveSelection(scan.Languages, "missing") == scan.Languages[0], "Unavailable preference falls back to installed language");
+        Check(OcrLanguageCatalog.ResolveSelection(scan.Languages, "missing") is null, "Unavailable preference requires explicit replacement");
+        Check(OcrLanguageCatalog.ResolveSelection([new("MiXeD_custom", "Custom")], "mixed_custom")?.Code == "MiXeD_custom", "Selection preserves exact discovered engine code");
         Check(OcrLanguageCatalog.ResolveSelection([], "eng") is null, "No selection without data");
         using (var locked = new FileStream(Path.Combine(data, "eng.traineddata"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             Check(Catalog.Scan(data).Languages.All(x => x.Code != "eng"), "Unreadable model cannot be selected");
@@ -160,17 +163,32 @@ internal static partial class Program
                     "Returning to 100% restores typography without cumulative scaling");
                 File.Delete(Path.Combine(data, "jpn.traineddata"));
                 await form.RefreshSourceLanguagesAsync();
-                Check(form.SelectedSourceLanguageCode != "jpn" && combo.Items.Count == 2, "Removed selected language cannot remain selected");
-                Check(Find<Label>(form, "SourceLanguageStatus").Text.Contains("unavailable"), "Fallback is explained");
+                Check(form.SelectedSourceLanguageCode is null && combo.Enabled && combo.Items.Count == 2, "Removed selected language requires explicit replacement");
+                Check(Find<Label>(form, "SourceLanguageStatus").Text.Contains("unavailable"), "Unavailable preference is explained");
+                Check(Find<Label>(form, "LanguageHint").Visible && Find<Label>(form, "LanguageHint").Text.Contains("'jpn' is unavailable"), "Unavailable preference is visible beside the source selector");
+                Capture(form, artifactDirectory, "source-unavailable");
+                await form.RefreshSourceLanguagesAsync();
+                Check(form.SelectedSourceLanguageCode is null && store.Load(out _).SourceLanguageCode == "jpn", "Repeated refresh does not acknowledge or replace an unavailable preference");
+                using (var reopened = CreateMainForm(store, targetStore))
+                {
+                    await reopened.RefreshSourceLanguagesAsync();
+                    Check(reopened.SelectedSourceLanguageCode is null && Find<Label>(reopened, "LanguageHint").Text.Contains("'jpn' is unavailable"), "Unavailable preference survives restart with its warning");
+                }
                 File.Delete(Path.Combine(data, "eng.traineddata"));
                 File.Delete(Path.Combine(data, "chi_sim.traineddata"));
                 await form.RefreshSourceLanguagesAsync();
-                Check(!combo.Enabled && form.SelectedSourceLanguageCode is null && store.Load(out _).SourceLanguageCode is null,
-                    "Removing all data clears and persists selection");
+                Check(!combo.Enabled && form.SelectedSourceLanguageCode is null && store.Load(out _).SourceLanguageCode == "jpn",
+                    "Removing all data disables selection without erasing the saved preference");
                 Install(data, "eng");
                 await form.RefreshSourceLanguagesAsync();
-                Check(combo.Enabled && combo.Items.Count == 1 && form.SelectedSourceLanguageCode == "eng",
-                    "A single installed language becomes selectable after the empty state");
+                Check(combo.Enabled && combo.Items.Count == 1 && form.SelectedSourceLanguageCode is null,
+                    "A different available language requires a new selection after the empty state");
+                Install(data, "jpn");
+                await form.RefreshSourceLanguagesAsync();
+                Check(form.SelectedSourceLanguageCode == "jpn", "Returning saved data restores the exact preference");
+                combo.SelectedItem = combo.Items.Cast<OcrLanguage>().Single(x => x.Code == "eng");
+                Check(store.Load(out _).SourceLanguageCode == "eng" && !Find<Label>(form, "LanguageHint").Text.Contains("unavailable"), "Explicit replacement saves and clears the warning");
+                await TestSourceLanguageUi(form, store, targetStore, data, artifactDirectory);
                 var pending = form.RefreshSourceLanguagesAsync();
                 Check(form.SelectedSourceLanguageCode is null, "No OCR source is exposed while a rescan is pending");
                 await pending;

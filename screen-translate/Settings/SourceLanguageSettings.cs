@@ -10,13 +10,14 @@ public sealed record SourceLanguageSettings(string OcrDataDirectory, string? Sou
 }
 
 /// <summary>Stores only configuration, never screenshots or recognized text.</summary>
-public sealed class SourceLanguageSettingsStore(string filePath)
+public sealed class SourceLanguageSettingsStore(string filePath, SourceLanguageSettings? defaults = null)
 {
+    private SourceLanguageSettings Fallback => defaults ?? SourceLanguageSettings.Default;
     public static SourceLanguageSettingsStore CreateDefault() => new(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ScreenTranslate", "source-language.json"));
 
-    public SourceLanguageSettings Load(out string? error)
+    public SourceLanguageSettings Load(out string? error, bool requireExisting = false)
     {
         error = null;
         try
@@ -27,12 +28,12 @@ public sealed class SourceLanguageSettingsStore(string filePath)
                 throw new JsonException("Invalid OCR data folder.");
             return settings;
         }
-        catch (FileNotFoundException) { return SourceLanguageSettings.Default; }
-        catch (DirectoryNotFoundException) { return SourceLanguageSettings.Default; }
+        catch (FileNotFoundException) when (!requireExisting) { return Fallback; }
+        catch (DirectoryNotFoundException) when (!requireExisting) { return Fallback; }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         {
-            error = "Source-language settings could not be read. Choose your OCR data folder again.";
-            return SourceLanguageSettings.Default;
+            error = "Source-language settings could not be read. Refresh to retry, or choose your OCR folder and language again.";
+            return Fallback;
         }
     }
 

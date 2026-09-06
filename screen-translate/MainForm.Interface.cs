@@ -38,7 +38,7 @@ public partial class MainForm
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public TranslationReadiness Readiness => TranslationReadiness.Evaluate(
-        _checkingSourceLanguages || _checkingTranslationModels, _sourceScanError,
+        _checkingSourceLanguages || _checkingTranslationModels || _validatingOcr, _sourceScanError ?? _ocrValidationError ?? SourceSelectionIssue,
         SelectedSourceLanguageCode, SelectedTargetLanguageCode, _translationScan, RuntimeUnavailable, _shortcutError);
 
     /// <summary>Selection and overlay implementations must use this owner and the work cancellation token.</summary>
@@ -149,9 +149,11 @@ public partial class MainForm
         _readinessCard.BorderColor = actionRequired ? (_darkTheme ? Color.FromArgb(82, 75, 54) : Color.FromArgb(231, 221, 196))
             : (_darkTheme ? DarkBorder : Border);
         _readinessCard.Invalidate();
-        _languageHint.Text = _checkingSourceLanguages ? "Checking installed source languages…" : source is null
-            ? "No OCR languages found. Add a source language in Offline models."
-            : "Only installed OCR languages appear in Read from. Target languages are always available.";
+        _languageHint.Text = _checkingSourceLanguages ? "Checking installed source languages…"
+            : _sourceScanError ?? _ocrValidationMessage ?? SourceSelectionIssue ??
+                "Only installed OCR languages appear in Read from. Target languages are always available.";
+        _languageHint.AccessibleDescription = _languageHint.Text;
+        LayoutPages();
     }
 
     private void WireShortcutEditor(Button apply)
@@ -277,7 +279,7 @@ public partial class MainForm
             tab.ForeColor = selected ? (_darkTheme ? DarkAccent : Accent) : MapFore(Muted);
         }
         foreach (var badge in new[] { _ocrModelStatus, _translationModelStatus })
-            badge.ForeColor = badge.Text is "●  Installed" or "●  Not required" ? ModelGoodColor
+            badge.ForeColor = badge.Text is "●  Installed" or "●  Not required" or "●  Validated" ? ModelGoodColor
                 : badge.Text.Contains("Checking") ? MapFore(Muted) : ModelWarningColor;
         UpdateReadiness();
         Invalidate(true);

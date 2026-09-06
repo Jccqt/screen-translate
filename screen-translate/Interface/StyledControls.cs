@@ -143,7 +143,8 @@ internal sealed class LanguagePicker : ComboBox
         Color background = dropdownSelection ? (dark ? Color.FromArgb(29, 64, 62) : Color.FromArgb(231, 244, 240)) : BackColor;
         using var brush = new SolidBrush(background);
         e.Graphics.FillRectangle(brush, e.Bounds);
-        string text = e.Index >= 0 ? GetItemText(Items[e.Index]) ?? "" : "No OCR languages installed";
+        string text = e.Index >= 0 ? GetItemText(Items[e.Index]) ?? "" :
+            Items.Count > 0 ? "Choose a source language" : "No OCR languages available";
         var bounds = e.Bounds;
         bounds.X += LogicalToDeviceUnits(12);
         bounds.Width -= LogicalToDeviceUnits(18);

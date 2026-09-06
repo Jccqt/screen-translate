@@ -29,15 +29,13 @@ public sealed class OcrLanguageCatalog
 
                 string code = Path.GetFileNameWithoutExtension(path);
                 // OSD and equation data are auxiliary models, not source languages.
-                if (code.Equals("osd", StringComparison.OrdinalIgnoreCase) ||
-                    code.Equals("equ", StringComparison.OrdinalIgnoreCase) ||
-                    code.Length == 0 || code.Contains('+'))
+                if (!IsSourceCode(code))
                     continue;
 
                 try
                 {
                     using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    if (file.Length == 0) continue;
+                    if (file.ReadByte() < 0) continue;
                 }
                 catch (IOException) { continue; }
                 catch (UnauthorizedAccessException) { continue; }
@@ -59,7 +57,14 @@ public sealed class OcrLanguageCatalog
 
     public static OcrLanguage? ResolveSelection(IReadOnlyList<OcrLanguage> languages, string? savedCode) =>
         languages.FirstOrDefault(language => string.Equals(language.Code, savedCode, StringComparison.OrdinalIgnoreCase))
-        ?? languages.FirstOrDefault();
+        ?? (savedCode is null ? languages.FirstOrDefault() : null);
+
+    // Tesseract interprets + and ~ as language expressions. Only a single local file is allowed.
+    public static bool IsSourceCode(string? code) => !string.IsNullOrWhiteSpace(code) &&
+        code != "." && code != ".." && code.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 &&
+        !code.Contains('+') && !code.Contains('~') &&
+        !code.Equals("osd", StringComparison.OrdinalIgnoreCase) &&
+        !code.Equals("equ", StringComparison.OrdinalIgnoreCase);
 
     private static Dictionary<string, string> CreateNames()
     {

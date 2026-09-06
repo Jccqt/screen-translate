@@ -34,6 +34,7 @@ public partial class MainForm : Form
     private readonly OcrLanguageCatalog _languageCatalog = new();
     private readonly SourceLanguageSettingsStore _settingsStore;
     private SourceLanguageSettings _sourceSettings;
+    private bool _sourceSettingsNeedRecovery;
     private int _refreshVersion;
     private bool _bindingLanguages;
 
@@ -50,10 +51,12 @@ public partial class MainForm : Form
 
     public MainForm(SourceLanguageSettingsStore settingsStore, TargetLanguageSettingsStore targetSettingsStore,
         ITranslationModelCatalog? translationCatalog = null, InterfaceSettingsStore? interfaceSettingsStore = null,
-        IGlobalShortcut? globalShortcut = null)
+        IGlobalShortcut? globalShortcut = null, IOcrEngine? ocrEngine = null)
     {
         _settingsStore = settingsStore;
+        _ocrEngine = ocrEngine ?? new TesseractOcrEngine();
         _sourceSettings = _settingsStore.Load(out string? error);
+        _sourceSettingsNeedRecovery = error is not null;
         _targetSettingsStore = targetSettingsStore;
         _targetSettings = targetSettingsStore.Load(out string? targetError);
         _translationCatalog = translationCatalog ?? new ArgosTranslationModelCatalog();
@@ -74,8 +77,19 @@ public partial class MainForm : Form
     {
         if (_lifetime.IsStopped || IsDisposed || Disposing) return;
         int version = ++_refreshVersion;
+        if (_sourceSettingsNeedRecovery)
+        {
+            var recovered = _settingsStore.Load(out string? error, requireExisting: true);
+            _settingsError.Text = error ?? "";
+            if (error is null)
+            {
+                _sourceSettings = recovered;
+                _sourceSettingsNeedRecovery = false;
+            }
+        }
         _checkingSourceLanguages = true;
         _sourceLanguage.Enabled = false;
+        ResetOcrValidation();
         UpdateTranslationModelStatus();
         string directory = OcrDataDirectory;
         _dataFolder.Text = directory;
@@ -90,7 +104,7 @@ public partial class MainForm : Form
         _sourceScanError = scan.Error;
 
         string? previousCode = _sourceSettings.SourceLanguageCode;
-        OcrLanguage? selected = OcrLanguageCatalog.ResolveSelection(scan.Languages, previousCode);
+        OcrLanguage? selected = _sourceSettingsNeedRecovery ? null : OcrLanguageCatalog.ResolveSelection(scan.Languages, previousCode);
         _bindingLanguages = true;
         try
         {
@@ -100,16 +114,10 @@ public partial class MainForm : Form
         }
         finally { _bindingLanguages = false; }
         _sourceLanguage.Enabled = scan.Languages.Count > 0;
-        _ocrModelStatus.Text = scan.Error is not null ? "●  Cannot check" : selected is null ? "●  Not installed" : "●  Installed";
-        _ocrModelStatus.ForeColor = selected is null ? ModelWarningColor : ModelGoodColor;
-        bool selectionChanged = previousCode is not null && selected?.Code != previousCode;
-        _sourceStatus.Text = scan.Error ?? (selected is null
-            ? "No OCR languages installed. Choose a folder containing .traineddata files, then refresh."
-            : selectionChanged
-                ? $"Previous language is unavailable. Selected {selected}."
-                : $"{scan.Languages.Count} installed OCR language(s). Choose the language of your screen text.");
-        // Preserve the saved preference on a temporary folder access error.
-        if (scan.Error is null && selected?.Code != previousCode)
+        ResetOcrValidation();
+        UpdateSourceStatus();
+        // Discovery never replaces or erases an existing preference, even if a file is locked or missing.
+        if (!_sourceSettingsNeedRecovery && scan.Error is null && previousCode is null && selected is not null)
         {
             _sourceSettings = _sourceSettings with { SourceLanguageCode = selected?.Code };
             SaveSourceSettings();
@@ -119,13 +127,21 @@ public partial class MainForm : Form
 
     private async void SourceLanguageChanged(object? sender, EventArgs e)
     {
-        if (_bindingLanguages) return;
+        if (_bindingLanguages || !_sourceLanguage.Enabled || _sourceLanguage.SelectedItem is not OcrLanguage) return;
         _sourceSettings = _sourceSettings with { SourceLanguageCode = SelectedSourceLanguageCode };
-        SaveSourceSettings();
+        SaveSourceSettings(explicitChoice: true);
+        ResetOcrValidation();
+        UpdateSourceStatus();
         await RefreshTranslationModelsAsync();
     }
 
-    private void SaveSourceSettings() => _settingsError.Text = _settingsStore.Save(_sourceSettings) ?? "";
+    private void SaveSourceSettings(bool explicitChoice = false)
+    {
+        // Only a user choice may replace settings that could not be loaded.
+        if (explicitChoice) _sourceSettingsNeedRecovery = false;
+        if (_sourceSettingsNeedRecovery) return;
+        _settingsError.Text = _settingsStore.Save(_sourceSettings) ?? "";
+    }
 
     private void ThemeButton_Click(object? sender, EventArgs e)
     {
