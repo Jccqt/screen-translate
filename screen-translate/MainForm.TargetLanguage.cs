@@ -17,6 +17,30 @@ public partial class MainForm
     private TranslationModelScan _translationScan = new([]);
     private int _translationRefreshVersion;
     private bool _checkingTranslationModels;
+    private readonly TranslationModelMonitor _translationMonitor = new();
+    private long _translationScanRevision;
+    private readonly System.Windows.Forms.Timer _translationMonitorTimer = new() { Interval = 300 };
+    private DateTime _nextTranslationScan = DateTime.UtcNow.AddSeconds(30);
+
+    private bool TranslationCheckPending => _checkingTranslationModels || _checkingSourceLanguages || _validatingOcr ||
+        _translationScanRevision != _translationMonitor.Revision;
+
+    private string? TranslationSourceIssue => _sourceScanError ?? _ocrValidationError ?? SourceSelectionIssue;
+
+    private void InitializeTranslationMonitoring()
+    {
+        _lifetime.Own(_translationMonitor);
+        _lifetime.Own(_translationMonitorTimer);
+        _translationMonitor.Watch(TranslationModelDirectory);
+        _translationMonitorTimer.Tick += async (_, _) =>
+        {
+            if (_lifetime.IsStopped) return;
+            if (_checkingTranslationModels) return;
+            if (_translationScanRevision != _translationMonitor.Revision || DateTime.UtcNow >= _nextTranslationScan)
+                await RefreshTranslationModelsAsync();
+        };
+        _translationMonitorTimer.Start();
+    }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string SelectedTargetLanguageCode => ((TranslationLanguage)_targetLanguage.SelectedItem!).Code;
@@ -26,7 +50,7 @@ public partial class MainForm
 
     // A discovered package path for future engine loading, not a guarantee of engine compatibility.
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public TranslationModel? SelectedTranslationModel => _checkingTranslationModels ? null :
+    public TranslationModel? SelectedTranslationModel => TranslationCheckPending || TranslationSourceIssue is not null ? null :
         TranslationModelAvailability.Evaluate(SelectedSourceLanguageCode, SelectedTargetLanguageCode, _translationScan).Model;
 
     private FlowLayoutPanel CreateTranslationModelControls(Control section)
@@ -73,31 +97,61 @@ public partial class MainForm
         if (_lifetime.IsStopped || IsDisposed || Disposing) return;
         int version = ++_translationRefreshVersion;
         string directory = TranslationModelDirectory;
+        _translationMonitor.Watch(directory);
+        long revision;
         _translationFolder.Text = directory;
         _translationFolder.AccessibleDescription = directory;
         _checkingTranslationModels = true;
         UpdateTranslationModelStatus();
         TranslationModelScan scan;
-        try { scan = await Task.Run(() => _translationCatalog.Scan(directory, WorkCancellationToken), WorkCancellationToken).WaitAsync(WorkCancellationToken); }
+        try
+        {
+            do
+            {
+                revision = _translationMonitor.Revision;
+                scan = await Task.Run(() => _translationCatalog.Scan(directory, WorkCancellationToken), WorkCancellationToken).WaitAsync(WorkCancellationToken);
+                if (_lifetime.IsStopped || IsDisposed || Disposing || version != _translationRefreshVersion) return;
+                if (revision == _translationMonitor.Revision) break;
+                // Package installation may emit several writes. Never confirm a scan that straddled them.
+                await Task.Delay(100, WorkCancellationToken);
+                if (_lifetime.IsStopped || IsDisposed || Disposing || version != _translationRefreshVersion) return;
+            } while (true);
+        }
         catch (OperationCanceledException) when (WorkCancellationToken.IsCancellationRequested) { return; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
+            revision = _translationMonitor.Revision;
             scan = new([], "Cannot check the translation models. Choose an accessible model folder and refresh.");
         }
         if (_lifetime.IsStopped || IsDisposed || Disposing || version != _translationRefreshVersion) return;
         _translationScan = scan;
+        _translationScanRevision = revision;
         _checkingTranslationModels = false;
+        _nextTranslationScan = DateTime.UtcNow.AddSeconds(30);
         UpdateTranslationModelStatus();
     }
 
     private void UpdateTranslationModelStatus()
     {
         UpdateReadiness();
-        if (_checkingTranslationModels)
+        if (TranslationCheckPending)
         {
             _translationModelStatus.Text = "●  Checking…";
             _translationModelStatus.ForeColor = Muted;
-            _targetStatus.Text = "Checking local translation models…";
+            _targetStatus.Text = _checkingSourceLanguages || _validatingOcr
+                ? "Checking the OCR source before determining translation model availability…"
+                : "Checking local translation models…";
+            _targetStatus.AccessibleDescription = _targetStatus.Text;
+            LayoutPages();
+            return;
+        }
+        if (TranslationSourceIssue is string sourceIssue)
+        {
+            _translationModelStatus.Text = "●  Cannot check";
+            _translationModelStatus.ForeColor = ModelWarningColor;
+            _targetStatus.Text = $"Translation model availability cannot be determined. {sourceIssue}";
+            _targetStatus.AccessibleDescription = _targetStatus.Text;
+            LayoutPages();
             return;
         }
         var availability = TranslationModelAvailability.Evaluate(SelectedSourceLanguageCode, SelectedTargetLanguageCode, _translationScan);
@@ -106,7 +160,7 @@ public partial class MainForm
         {
             TranslationModelState.SourceRequired => ("Select source", "Select an installed OCR source language to check the required translation model. Your output language can be selected now."),
             TranslationModelState.UnsupportedSource => ("Unknown source", "This OCR model has no known translation language code. Choose a supported OCR source language."),
-            TranslationModelState.NotRequired => ("Not required", "Source and output languages are the same. No translation model is required."),
+            TranslationModelState.NotRequired => ("Not required", "Source and output languages are the same. Translation is skipped; recognized text is returned unchanged in the result and copy controls. No translation model is required."),
             TranslationModelState.ReadError => ("Cannot check", _translationScan.Error!),
             TranslationModelState.Installed => ("Installed", $"Translation model installed for {pair} (local files found)."),
             _ => ("Not installed", $"No offline translation model installed for {pair}. Choose a folder containing an extracted Argos package for this direction, then refresh.")
@@ -118,5 +172,6 @@ public partial class MainForm
             ? ModelGoodColor : ModelWarningColor;
         _targetStatus.Text = message;
         _targetStatus.AccessibleDescription = message;
+        LayoutPages();
     }
 }
