@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
+using screen_translate.Interface;
 
 namespace screen_translate;
 
@@ -139,7 +140,7 @@ internal sealed class LanguagePicker : ComboBox
     {
         bool dropdownSelection = (e.State & DrawItemState.Selected) != 0 && (e.State & DrawItemState.ComboBoxEdit) == 0;
         bool dark = BackColor.GetBrightness() < .5;
-        Color background = dropdownSelection ? (dark ? Color.FromArgb(70, 62, 111) : Color.FromArgb(237, 234, 255)) : BackColor;
+        Color background = dropdownSelection ? (dark ? Color.FromArgb(29, 64, 62) : Color.FromArgb(231, 244, 240)) : BackColor;
         using var brush = new SolidBrush(background);
         e.Graphics.FillRectangle(brush, e.Bounds);
         string text = e.Index >= 0 ? GetItemText(Items[e.Index]) ?? "" : "No OCR languages installed";
@@ -147,7 +148,7 @@ internal sealed class LanguagePicker : ComboBox
         bounds.X += LogicalToDeviceUnits(12);
         bounds.Width -= LogicalToDeviceUnits(18);
         TextRenderer.DrawText(e.Graphics, text, Font, bounds,
-            Enabled ? ForeColor : (dark ? Color.FromArgb(155, 164, 186) : Color.FromArgb(110, 118, 139)),
+            Enabled ? ForeColor : (dark ? Color.FromArgb(163, 182, 183) : Color.FromArgb(94, 111, 112)),
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
     }
 
@@ -178,7 +179,8 @@ internal sealed class LanguagePicker : ComboBox
         g.FillRectangle(background, Width - edge, 0, edge, Height);
         int arrowWidth = LogicalToDeviceUnits(34);
         g.FillRectangle(background, Width - arrowWidth, 1, arrowWidth - 1, Height - 2);
-        using var border = new Pen(Focused ? Color.FromArgb(126, 110, 238) : dark ? Color.FromArgb(73, 79, 98) : Color.FromArgb(213, 218, 231));
+        using var border = new Pen(Focused ? (dark ? Color.FromArgb(49, 196, 174) : Color.FromArgb(8, 127, 112))
+            : dark ? Color.FromArgb(57, 76, 80) : Color.FromArgb(190, 207, 202));
         g.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using var pen = new Pen(ForeColor, Math.Max(1, LogicalToDeviceUnits(1)));
@@ -189,16 +191,23 @@ internal sealed class LanguagePicker : ComboBox
 
 internal sealed class AppMark : Control
 {
-    public AppMark() { DoubleBuffered = true; }
+    private readonly AppArtwork _artwork;
+
+    public AppMark(AppArtwork artwork)
+    {
+        _artwork = artwork;
+        DoubleBuffered = true;
+        ResizeRedraw = true;
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        e.Graphics.Clear(Parent?.BackColor ?? BackColor);
-        using var path = RoundedPanel.RoundedPath(ClientRectangle, LogicalToDeviceUnits(10));
-        using var fill = new SolidBrush(BackColor);
-        e.Graphics.FillPath(fill, path);
-        using var font = new Font("Segoe UI Semibold", 15F * DeviceDpi / 96F, FontStyle.Regular, GraphicsUnit.Pixel);
-        TextRenderer.DrawText(e.Graphics, "文", font, new Rectangle(0, 0, Width, Height), ForeColor,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        Color surface = Parent?.BackColor ?? BackColor;
+        e.Graphics.Clear(surface);
+        int size = Math.Min(Width, Height);
+        var image = _artwork.ForSurface(size, surface.GetBrightness() < .5F);
+        e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        e.Graphics.DrawImage(image, new Rectangle((Width - size) / 2, (Height - size) / 2, size, size));
     }
 }

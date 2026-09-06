@@ -95,10 +95,12 @@ internal static partial class Program
             "Selected appearance is exposed to assistive technology");
         Check(form.BackColor.R < 60 && new InterfaceSettingsStore(Path.Combine(Root, "isolated-interface.json")).Load(out _).Theme == AppTheme.Dark,
             "Dark appearance applies immediately and persists without models");
+        CheckBrandArtwork(form, dark: true);
         Capture(form, artifacts, "main-dark-missing");
         CaptureLowerSettings(form, artifacts, "main-dark-settings");
         Theme("Light").PerformClick();
         Check(form.BackColor.R > 230, "Light appearance applies immediately");
+        CheckBrandArtwork(form, dark: false);
         Capture(form, artifacts, "redesign-general-light");
         CaptureLowerSettings(form, artifacts, "redesign-models-light");
         Theme("System").PerformClick();
@@ -261,6 +263,29 @@ internal static partial class Program
             var button = Find<Button>(form, name);
             Check(button.TabStop && button.Height >= 36, name + " remains keyboard reachable with a comfortable hit area");
         }
+    }
+
+    private static void CheckBrandArtwork(MainForm form, bool dark)
+    {
+        var mark = form.Controls.Find("BrandMark", true).Single();
+        using var rendered = new Bitmap(mark.Width, mark.Height);
+        mark.DrawToBitmap(rendered, mark.ClientRectangle);
+        int frameColor = (dark ? Color.FromArgb(228, 234, 233) : Color.FromArgb(36, 52, 60)).ToArgb();
+        bool containsFrame = false;
+        for (int y = 0; y < rendered.Height && !containsFrame; y++)
+        for (int x = 0; x < rendered.Width && !containsFrame; x++)
+            containsFrame = rendered.GetPixel(x, y).ToArgb() == frameColor;
+        Check(containsFrame, $"Header renders the supplied {(dark ? "dark" : "light")} icon artwork after switching theme");
+
+        using var stream = typeof(MainForm).Assembly.GetManifestResourceStream("screen_translate.Assets.Brand.screen-translate.ico")!;
+        using var expectedIcon = new Icon(stream);
+        using var expected = expectedIcon.ToBitmap();
+        using var actual = form.Icon!.ToBitmap();
+        bool matches = actual.Size == expected.Size;
+        for (int y = 0; y < actual.Height && matches; y++)
+        for (int x = 0; x < actual.Width && matches; x++)
+            matches = actual.GetPixel(x, y) == expected.GetPixel(x, y);
+        Check(matches, "Window icon uses the embedded approved ICO and remains stable across theme changes");
     }
 
     private sealed class DisposableProbe : IDisposable

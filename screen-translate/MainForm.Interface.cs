@@ -134,18 +134,20 @@ public partial class MainForm
         };
         string? source = (_sourceLanguage.SelectedItem as Ocr.OcrLanguage)?.DisplayName;
         string target = _targetLanguage.SelectedItem?.ToString() ?? SelectedTargetLanguageCode;
-        _readinessTitle.Text = source is null ? title : $"{title} · {source} → {target}";
+        if (readiness.State == ReadinessState.ActionRequired && readiness.Reason == RuntimeUnavailable)
+            title = "Translation is not available yet";
+        _readinessTitle.Text = source is null || readiness.Reason == RuntimeUnavailable ? title : $"{title} · {source} → {target}";
         _readinessStatus.Text = readiness.Reason;
         _readinessStatus.AccessibleDescription = _readinessTitle.Text + ". " + readiness.Reason;
         _readinessTitle.ForeColor = readiness.State == ReadinessState.ActionRequired
             ? (_darkTheme ? Color.FromArgb(237, 195, 126) : Color.FromArgb(135, 87, 23))
-            : (_darkTheme ? Color.FromArgb(196, 187, 255) : Accent);
-        _readinessStatus.ForeColor = _darkTheme ? Color.FromArgb(203, 204, 217) : Ink;
+            : (_darkTheme ? DarkAccent : Accent);
+        _readinessStatus.ForeColor = _darkTheme ? DarkInk : Ink;
         bool actionRequired = readiness.State == ReadinessState.ActionRequired;
-        _readinessCard.BackColor = actionRequired ? (_darkTheme ? Color.FromArgb(44, 40, 36) : Color.FromArgb(255, 249, 237))
-            : (_darkTheme ? Color.FromArgb(36, 34, 53) : AccentSoft);
-        _readinessCard.BorderColor = actionRequired ? (_darkTheme ? Color.FromArgb(79, 67, 45) : Color.FromArgb(237, 223, 194))
-            : (_darkTheme ? Color.FromArgb(66, 60, 92) : Color.FromArgb(216, 211, 246));
+        _readinessCard.BackColor = actionRequired ? (_darkTheme ? Color.FromArgb(44, 42, 34) : Color.FromArgb(251, 248, 240))
+            : (_darkTheme ? DarkAccentSoft : AccentSoft);
+        _readinessCard.BorderColor = actionRequired ? (_darkTheme ? Color.FromArgb(82, 75, 54) : Color.FromArgb(231, 221, 196))
+            : (_darkTheme ? DarkBorder : Border);
         _readinessCard.Invalidate();
         _languageHint.Text = _checkingSourceLanguages ? "Checking installed source languages…" : source is null
             ? "No OCR languages found. Add a source language in Offline models."
@@ -235,16 +237,17 @@ public partial class MainForm
         _darkTheme = _interfaceSettings.Theme == AppTheme.Dark || (_interfaceSettings.Theme == AppTheme.System && systemDark);
         Color MapBack(Color color)
         {
-            if (!_darkTheme || color == Accent || color == Color.Transparent) return color;
-            if (color == Border) return Color.FromArgb(62, 67, 84);
-            return color == Canvas ? Color.FromArgb(23, 25, 34) : Color.FromArgb(32, 35, 47);
+            if (!_darkTheme || color == Color.Transparent) return color;
+            if (color == Accent) return DarkAccent;
+            if (color == Border) return DarkBorder;
+            return color == Canvas ? DarkCanvas : DarkSurface;
         }
         Color MapFore(Color color)
         {
             if (!_darkTheme || color == Color.White) return color;
-            if (color == Muted) return Color.FromArgb(183, 188, 200);
-            if (color == Accent) return Color.FromArgb(184, 177, 255);
-            if (color == Ink || color == SystemColors.ControlText || color == SystemColors.WindowText) return Color.FromArgb(238, 240, 245);
+            if (color == Muted) return DarkMuted;
+            if (color == Accent) return DarkAccent;
+            if (color == Ink || color == SystemColors.ControlText || color == SystemColors.WindowText) return DarkInk;
             return Color.FromArgb(255, 199, 123);
         }
         foreach (var (control, colors) in _originalColors)
@@ -252,23 +255,26 @@ public partial class MainForm
             control.BackColor = MapBack(colors.Back);
             control.ForeColor = MapFore(colors.Fore);
         }
-        foreach (var (panel, color) in _originalBorders) panel.BorderColor = _darkTheme ? Color.FromArgb(65, 69, 81) : color;
+        foreach (var (panel, color) in _originalBorders) panel.BorderColor = _darkTheme ? (color == Surface ? DarkSurface : DarkBorder) : color;
         foreach (var button in _originalColors.Keys.OfType<PillButton>().Where(button => !button.IsTab && !button.IsSegment))
-            button.BorderColor = button.Primary ? Accent : (_darkTheme ? Color.FromArgb(62, 67, 84) : Border);
+        {
+            button.BorderColor = button.Primary ? (_darkTheme ? DarkAccent : Accent) : (_darkTheme ? DarkBorder : Border);
+            if (button.Primary) button.ForeColor = _darkTheme ? DarkCanvas : Color.White;
+        }
         foreach (PillButton button in _themeButtons)
         {
             bool selected = button.Text == _interfaceSettings.Theme.ToString();
             button.Selected = selected;
-            button.BackColor = selected ? (_darkTheme ? Color.FromArgb(53, 45, 84) : AccentSoft) : MapBack(Surface);
-            button.BorderColor = selected ? (_darkTheme ? Color.FromArgb(143, 127, 229) : Accent) : (_darkTheme ? Color.FromArgb(62, 67, 84) : Border);
-            button.ForeColor = selected ? (_darkTheme ? Color.FromArgb(204, 192, 255) : Accent) : MapFore(Muted);
+            button.BackColor = selected ? (_darkTheme ? DarkAccentSoft : AccentSoft) : MapBack(Surface);
+            button.BorderColor = selected ? (_darkTheme ? DarkAccent : Accent) : (_darkTheme ? DarkBorder : Border);
+            button.ForeColor = selected ? (_darkTheme ? DarkAccent : Accent) : MapFore(Muted);
         }
         foreach (var tab in new[] { _generalTab, _modelsTab })
         {
             bool selected = ReferenceEquals(tab, _modelsTab) == _showModels;
             tab.Selected = selected;
             tab.BackColor = MapBack(Canvas);
-            tab.ForeColor = selected ? (_darkTheme ? Color.FromArgb(191, 177, 255) : Accent) : MapFore(Muted);
+            tab.ForeColor = selected ? (_darkTheme ? DarkAccent : Accent) : MapFore(Muted);
         }
         foreach (var badge in new[] { _ocrModelStatus, _translationModelStatus })
             badge.ForeColor = badge.Text is "●  Installed" or "●  Not required" ? ModelGoodColor

@@ -36,7 +36,7 @@ public partial class MainForm
     private PillButton ActionButton(string text, string name, bool primary = false) => new()
     {
         Text = text, Name = name, AccessibleName = text, Size = new Size(136, 36),
-        Font = new Font("Segoe UI Semibold", 9.5F), CornerRadius = 6,
+        Font = new Font("Segoe UI Semibold", 9.5F), CornerRadius = 4,
         BackColor = primary ? Accent : Surface, ForeColor = primary ? Color.White : Ink,
         BorderColor = primary ? Accent : Border, Primary = primary, Cursor = Cursors.Hand,
         Margin = new Padding(0, 0, 8, 0)
@@ -44,7 +44,7 @@ public partial class MainForm
 
     private RoundedPanel Card(string name) => new()
     {
-        Name = name, BackColor = Surface, BorderColor = Border, CornerRadius = 10,
+        Name = name, BackColor = Surface, BorderColor = Border, CornerRadius = 6,
         Margin = new Padding(0, 0, 0, 12)
     };
 
@@ -54,36 +54,41 @@ public partial class MainForm
         Text = "Screen Translate";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(900, 700);
-        ClientSize = new Size(1040, 840);
+        ClientSize = new Size(1000, 800);
         BackColor = Canvas;
         Font = new Font("Segoe UI", 10F);
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96, 96);
         _lifetime.Own(_tooltips);
+        _lifetime.Own(_artwork);
+        Icon = _artwork.WindowIcon;
 
-        var masthead = new Panel { Dock = DockStyle.Top, Height = 82, BackColor = Surface };
-        var mark = new AppMark { Location = new Point(32, 22), Size = new Size(40, 40), BackColor = Accent, ForeColor = Color.White };
+        var masthead = new Panel { Name = "Masthead", Dock = DockStyle.Top, Height = 88, BackColor = Surface };
+        var mark = new AppMark(_artwork) { Name = "BrandMark", Location = new Point(32, 19), Size = new Size(48, 48),
+            AccessibleName = "Screen Translate", AccessibleRole = AccessibleRole.Graphic, TabStop = false };
         var brand = TextLabel("Screen Translate", 14, true);
-        brand.SetBounds(84, 28, 240, 30);
-        var privacy = TextLabel("Local processing. Private by design.", 9.5F, muted: true);
+        brand.SetBounds(94, 19, 260, 28);
+        var brandHint = TextLabel("Screen text, in your language.", 9.5F, muted: true);
+        brandHint.SetBounds(94, 48, 300, 24);
+        var privacy = TextLabel("On-device processing", 9.5F, muted: true);
         privacy.TextAlign = ContentAlignment.MiddleRight;
-        masthead.Controls.AddRange([mark, brand, privacy]);
-        masthead.Resize += (_, _) => privacy.SetBounds(masthead.Width - U(344), U(27), U(312), U(30));
+        masthead.Controls.AddRange([mark, brand, brandHint, privacy]);
+        masthead.Resize += (_, _) => privacy.SetBounds(masthead.Width - U(290), U(29), U(258), U(30));
         var line = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Border };
         masthead.Controls.Add(line);
 
         _page = new Panel { Name = "SettingsViewport", Dock = DockStyle.Fill, AutoScroll = true, BackColor = Canvas };
         _content = new Panel { Name = "SettingsContent", BackColor = Canvas, Margin = Padding.Empty };
         _page.Controls.Add(_content);
-        _pageTitle = TextLabel("Translation setup", 23, true);
+        _pageTitle = TextLabel("Translation setup", 20, true);
         _pageTitle.Name = "PageTitle";
-        _pageSubtitle = TextLabel("Choose how screen text is captured and translated.", 10.5F, muted: true);
+        _pageSubtitle = TextLabel("Set your languages, then configure the shortcut.", 10F, muted: true);
         _generalTab = ActionButton("General", "NavigateSettings");
         _modelsTab = ActionButton("Offline models", "NavigateModels");
         _generalTab.IsTab = _modelsTab.IsTab = true;
         _generalTab.Click += (_, _) => ShowPage(false);
         _modelsTab.Click += (_, _) => { ShowPage(true); FocusModelActions(); };
-        _sectionHeader = new Panel { Name = "PageHeading", Dock = DockStyle.Top, Height = 122, BackColor = Canvas };
+        _sectionHeader = new Panel { Name = "PageHeading", Dock = DockStyle.Top, Height = 112, BackColor = Canvas };
         _sectionHeader.Controls.AddRange([_pageTitle, _pageSubtitle, _generalTab, _modelsTab]);
 
         BuildReadinessCard();
@@ -132,7 +137,7 @@ public partial class MainForm
     private void BuildGeneralPage()
     {
         var languages = Card("LanguagesCard");
-        var title = TextLabel("Translation languages", 12, true);
+        var title = TextLabel("Languages", 12, true);
         var sourceLabel = TextLabel("Read from", 9.5F, muted: true);
         var targetLabel = TextLabel("Translate to", 9.5F, muted: true);
         var arrow = TextLabel("→", 19, muted: true);
@@ -169,7 +174,11 @@ public partial class MainForm
             languages.Height = U(178);
         });
 
+        var preferences = Card("PreferencesCard");
         var appearance = Card("AppearanceCard");
+        appearance.TabIndex = 1;
+        appearance.BorderColor = Surface;
+        appearance.CornerRadius = 0;
         var appearanceTitle = TextLabel("Appearance", 11, true);
         var appearanceHint = TextLabel("Follow Windows or choose a theme.", 9.5F, muted: true);
         appearance.Controls.AddRange([appearanceTitle, appearanceHint]);
@@ -181,22 +190,25 @@ public partial class MainForm
             _themeButtons.Add(button);
             appearance.Controls.Add(button);
         }
-        _generalPage.Controls.Add(appearance);
+        preferences.Controls.Add(appearance);
         _responsiveLayouts.Add(() =>
         {
-            appearanceTitle.SetBounds(U(24), U(22), U(320), U(24));
-            appearanceHint.SetBounds(U(24), U(49), U(320), U(23));
+            appearanceTitle.SetBounds(U(23), U(22), U(320), U(24));
+            appearanceHint.SetBounds(U(23), U(49), U(320), U(23));
             for (int i = 0; i < _themeButtons.Count; i++)
                 _themeButtons[i].SetBounds(appearance.Width - U(328) + U(i * 104), U(29), U(96), U(38));
             appearance.Height = U(96);
         });
 
         var shortcut = Card("ShortcutCard");
+        shortcut.TabIndex = 0;
+        shortcut.BorderColor = Surface;
+        shortcut.CornerRadius = 0;
         var shortcutTitle = TextLabel("Global shortcut", 11, true);
         var shortcutHint = TextLabel("Focus the field, press your keys, then Apply.", 9.5F, muted: true);
         _pendingShortcut = _interfaceSettings.Shortcut;
         var inputFrame = Card("ShortcutField");
-        inputFrame.CornerRadius = 6;
+        inputFrame.CornerRadius = 4;
         _shortcutInput = new TextBox
         {
             Name = "GlobalShortcut", AccessibleName = "Global translation shortcut", ReadOnly = true,
@@ -204,27 +216,37 @@ public partial class MainForm
             Text = InterfaceSettings.FormatShortcut(_pendingShortcut), TextAlign = HorizontalAlignment.Center
         };
         inputFrame.Controls.Add(_shortcutInput);
-        _shortcutInput.GotFocus += (_, _) => { inputFrame.BorderColor = Accent; inputFrame.Invalidate(); };
-        _shortcutInput.LostFocus += (_, _) => { inputFrame.BorderColor = _darkTheme ? Color.FromArgb(62, 67, 84) : Border; inputFrame.Invalidate(); };
+        _shortcutInput.GotFocus += (_, _) => { inputFrame.BorderColor = _darkTheme ? DarkAccent : Accent; inputFrame.Invalidate(); };
+        _shortcutInput.LostFocus += (_, _) => { inputFrame.BorderColor = _darkTheme ? DarkBorder : Border; inputFrame.Invalidate(); };
         var apply = ActionButton("Apply", "ApplyShortcut");
         _shortcutStatus = TextLabel("Use Ctrl or Alt with a letter, number, or F key.", 9F, muted: true);
         _shortcutStatus.Name = "ShortcutStatus";
         WireShortcutEditor(apply);
         shortcut.Controls.AddRange([shortcutTitle, shortcutHint, inputFrame, apply, _shortcutStatus]);
-        _generalPage.Controls.Add(shortcut);
+        preferences.Controls.Add(shortcut);
+        var divider = new Panel { Name = "PreferencesDivider", BackColor = Border, TabStop = false };
+        preferences.Controls.Add(divider);
+        _generalPage.Controls.Add(preferences);
         _responsiveLayouts.Add(() =>
         {
             int right = shortcut.Width - U(388);
-            shortcutTitle.SetBounds(U(24), U(22), U(340), U(24));
-            shortcutHint.SetBounds(U(24), U(50), U(340), U(42));
+            shortcutTitle.SetBounds(U(23), U(22), Math.Min(U(340), right - U(43)), U(24));
+            shortcutHint.SetBounds(U(23), U(50), Math.Min(U(340), right - U(43)), U(42));
             inputFrame.SetBounds(right, U(23), U(264), U(40));
             _shortcutInput.SetBounds(U(12), U(10), U(240), U(24));
             apply.SetBounds(right + U(276), U(23), U(88), U(40));
-            _shortcutStatus.SetBounds(right, U(72), U(364), U(48));
-            shortcut.Height = U(132);
+            _shortcutStatus.SetBounds(right, U(70), U(364), U(48));
+            shortcut.Height = U(126);
+        });
+        _responsiveLayouts.Add(() =>
+        {
+            shortcut.SetBounds(U(1), U(6), preferences.Width - U(2), U(121));
+            appearance.SetBounds(U(1), U(128), preferences.Width - U(2), U(91));
+            divider.SetBounds(U(24), U(127), preferences.Width - U(48), U(1));
+            preferences.Height = U(225);
         });
 
-        var footer = TextLabel("Changes are saved automatically. Closing this window exits the app.", 9F, muted: true);
+        var footer = TextLabel("Settings save automatically. Keep this window open to use the shortcut.", 9F, muted: true);
         footer.Name = "GeneralFooter";
         _generalPage.Controls.Add(footer);
     }
@@ -332,7 +354,7 @@ public partial class MainForm
         _readinessAction.Text = models ? "Refresh setup" : "Manage models";
         _readinessAction.AccessibleName = _readinessAction.Text;
         _pageTitle.Text = models ? "Offline models" : "Translation setup";
-        _pageSubtitle.Text = models ? "Everything your languages need, stored on your device." : "Choose how screen text is captured and translated.";
+        _pageSubtitle.Text = models ? "Manage the local files for your selected languages." : "Set your languages, then configure the shortcut.";
         _page.AutoScrollPosition = Point.Empty;
         UpdateSettingsErrors();
         LayoutPages();
@@ -354,10 +376,10 @@ public partial class MainForm
             int width = Math.Min(U(960), Math.Max(U(720), _page.Width - U(80)));
             int left = Math.Max(U(24), (_page.Width - width) / 2);
             _content.SetBounds(left, _page.AutoScrollPosition.Y, width, _content.Height);
-            _pageTitle.SetBounds(left, U(26), width - U(300), U(44));
-            _pageSubtitle.SetBounds(left, U(75), width, U(26));
-            _generalTab.SetBounds(left + width - U(276), U(30), U(108), U(42));
-            _modelsTab.SetBounds(left + width - U(152), U(30), U(152), U(42));
+            _pageTitle.SetBounds(left, U(22), width - U(300), U(40));
+            _pageSubtitle.SetBounds(left, U(66), width, U(26));
+            _generalTab.SetBounds(left + width - U(276), U(22), U(108), U(42));
+            _modelsTab.SetBounds(left + width - U(152), U(22), U(152), U(42));
             _readinessCard.SetBounds(0, 0, width, U(96));
             _readinessTitle.SetBounds(U(20), U(16), width - U(210), U(24));
             _readinessStatus.SetBounds(U(20), U(44), width - U(210), U(40));
@@ -369,19 +391,21 @@ public partial class MainForm
             int pagesTop = U(112) + (hasError ? errorHeight + U(10) : 0);
             foreach (var page in new[] { _generalPage, _modelsPage }) page.SetBounds(0, pagesTop, width, page.Height);
             foreach (var card in _generalPage.Controls.OfType<RoundedPanel>().Concat(_modelsPage.Controls.OfType<RoundedPanel>())) card.Width = width;
+            foreach (var row in new[] { "ShortcutCard", "AppearanceCard" })
+                _generalPage.Controls.Find(row, true).Single().Width = width - U(2);
             foreach (var layout in _responsiveLayouts) layout();
             foreach (var page in new[] { _generalPage, _modelsPage })
             {
                 int y = 0;
                 foreach (Control child in page.Controls)
                 {
-                    child.SetBounds(0, y, width, child is Label ? U(36) : child.Height);
+                    child.SetBounds(0, y, width, child is Label ? U(28) : child.Height);
                     y += child.Height + U(12);
                 }
                 page.Height = y;
             }
             _content.Height = pagesTop + (_showModels ? _modelsPage.Height : _generalPage.Height);
-            _page.AutoScrollMinSize = new Size(0, _content.Height + U(26));
+            _page.AutoScrollMinSize = new Size(0, _content.Height + U(12));
         }
         finally { _layingOut = false; }
         // ScrollableControl measures its range before Resize handlers; measure the settled cards again.

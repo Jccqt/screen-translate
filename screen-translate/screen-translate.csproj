@@ -7,9 +7,11 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Assets\Brand\screen-translate.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets\Brand\*.png;Assets\Brand\*.ico" />
     <Compile Remove="Tests\**\*.cs" />
     <EmbeddedResource Remove="Tests\**\*" />
     <None Remove="Tests\**\*" />

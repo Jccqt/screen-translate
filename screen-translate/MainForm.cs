@@ -8,13 +8,21 @@ namespace screen_translate;
 
 public partial class MainForm : Form
 {
-    private static readonly Color Canvas = Color.FromArgb(247, 248, 250);
+    private static readonly Color Canvas = Color.FromArgb(245, 247, 246);
     private static readonly Color Surface = Color.White;
-    private static readonly Color Border = Color.FromArgb(226, 229, 235);
-    private static readonly Color Ink = Color.FromArgb(28, 32, 41);
-    private static readonly Color Muted = Color.FromArgb(105, 111, 123);
-    private static readonly Color Accent = Color.FromArgb(91, 85, 214);
-    private static readonly Color AccentSoft = Color.FromArgb(239, 238, 252);
+    private static readonly Color Border = Color.FromArgb(216, 225, 222);
+    private static readonly Color Ink = Color.FromArgb(36, 52, 60);
+    private static readonly Color Muted = Color.FromArgb(94, 111, 112);
+    private static readonly Color Accent = Color.FromArgb(8, 127, 112);
+    private static readonly Color AccentSoft = Color.FromArgb(231, 244, 240);
+    private static readonly Color DarkCanvas = Color.FromArgb(22, 32, 37);
+    private static readonly Color DarkSurface = Color.FromArgb(30, 43, 48);
+    private static readonly Color DarkBorder = Color.FromArgb(57, 76, 80);
+    private static readonly Color DarkInk = Color.FromArgb(228, 234, 233);
+    private static readonly Color DarkMuted = Color.FromArgb(163, 182, 183);
+    private static readonly Color DarkAccent = Color.FromArgb(49, 196, 174);
+    private static readonly Color DarkAccentSoft = Color.FromArgb(29, 64, 62);
+    private readonly AppArtwork _artwork = new();
 
     private readonly List<PillButton> _themeButtons = [];
     private Panel _page = null!;
