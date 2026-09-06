@@ -87,7 +87,7 @@ To require CI before merging, configure the repository's branch protection or
 ruleset to require `Windows x64 (Debug)` and `Windows x64 (Release)` after their
 first GitHub run. Defining a workflow alone does not enforce merge protection.
 
-## Verification
+## Initial local verification
 
 Verified locally on 2026-09-06, Windows x64, .NET SDK 10.0.400:
 
@@ -116,3 +116,32 @@ Local build/harness evidence is under `Tests/Artifacts/ci/Debug/` and
 Workflow behavior follows GitHub's [workflow syntax reference](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
 the official [setup-dotnet action](https://github.com/actions/setup-dotnet), and
 [upload-artifact action](https://github.com/actions/upload-artifact).
+
+## Hosted desktop-height failure and correction
+
+The first [master run](https://github.com/Jccqt/screen-translate/actions/runs/34029898733)
+built successfully and passed native OCR checks in both configurations, then
+failed `Everyday settings need no scrolling at the default window size`.
+Windows can constrain the launch window to a smaller desktop working area;
+the test incorrectly required no scrolling even when the viewport was shorter
+than the intended design height.
+
+Reproduced that exact failure locally on master with a 788-pixel outer window
+height at 96 DPI. The test now retains the intended-height content-fit check
+and allows scrolling only below that viewport height. It exercises both launch
+and constrained sizes, and logs window, client, viewport, content, and DPI values.
+The application and workflow behavior are unchanged.
+
+- **Automated:** `dotnet build` and both CI configurations passed with zero
+  warnings/errors; 305 assertions passed per configuration with no skips.
+  The constrained-size regression failed before the assertion correction.
+- **Rendered UI:** inspected `desktop-constrained-launch.png` from Release;
+  language, shortcut, and appearance controls remain visible and the shorter
+  viewport scrolls for the remaining content.
+- **Physical desktop:** not tested; the regression resizes the test form and
+  does not change the user's display configuration.
+- **Hosted evidence:** the same test correction in commit `3046f06` on
+  `codex/update-target-language-1.3` already passed both configurations and
+  artifact uploads in [GitHub Actions](https://github.com/Jccqt/screen-translate/actions/runs/34039460584).
+  Its application into the local master checkout still needs to be committed
+  and pushed before master receives a new hosted result.

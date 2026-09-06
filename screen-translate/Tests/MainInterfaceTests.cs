@@ -245,6 +245,8 @@ internal static partial class Program
     private static void TestRedesignedLayout(MainForm form)
     {
         var page = Find<Panel>(form, "SettingsViewport");
+        Console.WriteLine($"Layout: window={form.Size}, client={form.ClientSize}, viewport={page.ClientSize}, " +
+            $"required={page.AutoScrollMinSize}, DPI={form.DeviceDpi}");
         Check(Find<Panel>(form, "GeneralPage").Visible && !Find<Panel>(form, "ModelsPage").Visible,
             "Launch focuses everyday preferences and keeps model diagnostics on a separate page");
         foreach (var name in new[] { "LanguagesCard", "AppearanceCard", "ShortcutCard" })
@@ -253,7 +255,12 @@ internal static partial class Program
             var bounds = page.RectangleToClient(card.RectangleToScreen(card.ClientRectangle));
             Check(page.ClientRectangle.Contains(bounds), name + " is fully visible at the default window size");
         }
-        Check(!page.VerticalScroll.Visible, "Everyday settings need no scrolling at the default window size");
+        // Windows can clamp the launch height to the runner's smaller desktop working area.
+        // Keep the design-size assertion, but allow scrolling when the actual viewport is shorter.
+        int intendedViewportHeight = 800 * form.DeviceDpi / 96 - Find<Panel>(form, "Masthead").Height - Find<Panel>(form, "PageHeading").Height;
+        Check(page.AutoScrollMinSize.Height <= intendedViewportHeight, "Everyday settings fit the intended default viewport height");
+        Check(!page.VerticalScroll.Visible || page.ClientSize.Height < intendedViewportHeight,
+            "Everyday settings only scroll when Windows provides less than the default viewport height");
         var source = Find<ComboBox>(form, "SourceLanguage");
         var target = Find<ComboBox>(form, "TargetLanguage");
         Check(source.Width == target.Width && source.Top == target.Top && source.Height >= 36,
