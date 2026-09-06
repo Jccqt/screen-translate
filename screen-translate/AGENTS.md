@@ -52,6 +52,12 @@ Do not require an internet connection after the necessary OCR and translation mo
 
 Treat these as future possibilities, not implicit implementation requirements.
 
+## Commits and Pull Requests
+
+- Keep commit titles and descriptions short and clear.
+- Use clear pull request titles and short descriptions that summarize the change and relevant validation.
+- Do not include Codex as a commit co-author or add a `Co-authored-by` trailer attributing a commit to Codex.
+
 ## Development Guidance
 
 - Preserve the offline-first and privacy-first behavior when making changes.
