@@ -122,6 +122,12 @@ internal static partial class Program
                 Check(Find<Label>(form, "SourceLanguageStatus").Text.Contains("No OCR languages"), "Empty state explains how to install data");
                 Capture(form, artifactDirectory, "empty");
                 TestRedesignedLayout(form);
+                Size launchSize = form.Size;
+                form.Height = Math.Min(form.Height, 788 * form.DeviceDpi / 96);
+                Application.DoEvents();
+                TestRedesignedLayout(form);
+                Capture(form, artifactDirectory, "desktop-constrained-launch");
+                form.Size = launchSize;
                 await TestMainInterfaceUi(form, artifactDirectory);
                 Install(data, "eng");
                 Install(data, "jpn");

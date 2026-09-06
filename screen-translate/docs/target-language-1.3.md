@@ -80,7 +80,7 @@ dotnet run --project Tests/ScreenTranslate.Tests.csproj -- Tests/Artifacts
 Verified on 2026-09-06:
 
 - Application and test builds: zero warnings and errors.
-- Automated: Debug acceptance harness passed 333 assertions. The full Release CI script passed 344 assertions with no skips, including genuine Tesseract model loading. Coverage includes existing OCR/settings/layout regressions plus automatic installation/removal/root replacement, focus invalidation, unavailable/unmapped/failed OCR sources, same-language engine/catalog bypass, exact result/copy text, clipboard failure/retry, theme changes, shutdown, and result layout at minimum width and synthetic 150% DPI. Translation discovery uses synthetic packages and different-language processing uses a fake engine.
+- Automated: The full CI script passed 356 assertions in each of Debug and Release with no skips, including genuine Tesseract model loading. Layout checks also cover a desktop-constrained launch height. Coverage includes existing OCR/settings/layout regressions plus automatic installation/removal/root replacement, focus invalidation, unavailable/unmapped/failed OCR sources, same-language engine/catalog bypass, exact result/copy text, clipboard failure/retry, theme changes, shutdown, and result layout at minimum width and synthetic 150% DPI. Translation discovery uses synthetic packages and different-language processing uses a fake engine.
 - Rendered UI: inspected source-unavailable and unmapped states and the shared result window in Light/Dark themes, at minimum size, and at synthetic 150% DPI.
 - Physical desktop: exercised both copy buttons using Windows input and verified exact fixture text on the real clipboard; `Esc` closed the result preview and its process exited normally.
 
