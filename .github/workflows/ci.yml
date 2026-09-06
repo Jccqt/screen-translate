@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Windows x64 (${{ matrix.configuration }})
+    runs-on: windows-2025
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: screen-translate
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build and run acceptance harness
+        run: ./scripts/Invoke-CI.ps1 -Configuration ${{ matrix.configuration }}
+
+      - name: Upload logs and rendered UI
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: acceptance-windows-x64-${{ matrix.configuration }}
+          path: |
+            screen-translate/Tests/Artifacts/ci/${{ matrix.configuration }}/*.log
+            screen-translate/Tests/Artifacts/ci/${{ matrix.configuration }}/*.png
+          if-no-files-found: warn
+          retention-days: 14
