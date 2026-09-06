@@ -38,7 +38,7 @@ public partial class MainForm
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public TranslationReadiness Readiness => TranslationReadiness.Evaluate(
-        _checkingSourceLanguages || _checkingTranslationModels || _validatingOcr, _sourceScanError ?? _ocrValidationError ?? SourceSelectionIssue,
+        TranslationCheckPending, TranslationSourceIssue,
         SelectedSourceLanguageCode, SelectedTargetLanguageCode, _translationScan, RuntimeUnavailable, _shortcutError);
 
     /// <summary>Selection and overlay implementations must use this owner and the work cancellation token.</summary>
@@ -151,7 +151,7 @@ public partial class MainForm
         _readinessCard.Invalidate();
         _languageHint.Text = _checkingSourceLanguages ? "Checking installed source languages…"
             : _sourceScanError ?? _ocrValidationMessage ?? SourceSelectionIssue ??
-                "Only installed OCR languages appear in Read from. Target languages are always available.";
+                "Targets remain selectable without models. A compatible offline model may not exist for every language pair.";
         _languageHint.AccessibleDescription = _languageHint.Text;
         LayoutPages();
     }
@@ -281,6 +281,8 @@ public partial class MainForm
         foreach (var badge in new[] { _ocrModelStatus, _translationModelStatus })
             badge.ForeColor = badge.Text is "●  Installed" or "●  Not required" or "●  Validated" ? ModelGoodColor
                 : badge.Text.Contains("Checking") ? MapFore(Muted) : ModelWarningColor;
+        foreach (var result in OwnedForms.OfType<TranslationResultForm>())
+            result.ApplyTheme(_darkTheme ? DarkSurface : Surface, _darkTheme ? DarkInk : Ink);
         UpdateReadiness();
         Invalidate(true);
     }

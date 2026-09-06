@@ -16,6 +16,11 @@ internal static partial class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        if (args.Contains("--result-preview"))
+        {
+            RunResultPreview();
+            return 0;
+        }
         Directory.CreateDirectory(Root);
         try
         {
@@ -24,6 +29,7 @@ internal static partial class Program
             TestOcrModelLoading().GetAwaiter().GetResult();
             TestTranslationCatalog();
             TestTargetSettings();
+            TestTranslationResults().GetAwaiter().GetResult();
             TestInterfaceSettingsAndReadiness();
             TestLifetime();
             TestNativeShortcut();
@@ -136,6 +142,7 @@ internal static partial class Program
                 }
                 Capture(form, artifactDirectory, "installed-default");
                 await TestTargetLanguageUi(form, store, targetStore, artifactDirectory);
+                await TestTargetLanguageRevisionUi(artifactDirectory);
                 foreach (Size size in new[] { new Size(900, 650), new Size(1280, 850) })
                 {
                     form.Size = size;

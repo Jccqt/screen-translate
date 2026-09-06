@@ -49,7 +49,7 @@ public partial class MainForm
             $"{_sourceLanguage.Items.Count} installed OCR language(s). Use Validate OCR data to check the selected language with Tesseract.";
         _sourceStatus.AccessibleDescription = _sourceStatus.Text;
         _sourceLanguage.AccessibleDescription = _sourceStatus.Text;
-        UpdateReadiness();
+        UpdateTranslationModelStatus();
     }
 
     public async Task ValidateSelectedOcrLanguageAsync()

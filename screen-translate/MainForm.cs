@@ -67,6 +67,7 @@ public partial class MainForm : Form
         InitializeComponent();
         BuildInterface();
         InitializeInterfaceBehavior(interfaceError);
+        InitializeTranslationMonitoring();
         _settingsError.Text = error ?? "";
         _targetSettingsError.Text = targetError ?? "";
         Shown += async (_, _) => { _mainWindowShown = true; RegisterShortcut(); await RefreshSourceLanguagesAsync(); };
