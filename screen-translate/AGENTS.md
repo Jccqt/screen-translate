@@ -54,6 +54,9 @@ Treat these as future possibilities, not implicit implementation requirements.
 
 ## Commits and Pull Requests
 
+- Follow Conventional Commits for every commit: `<type>[!]: <description>`. Do not include a scope.
+- Choose the type that matches the change, such as `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, or `chore`. Use a short, imperative description, for example `feat: support copying translated text` or `fix: preserve target language on reload`.
+- Mark breaking changes with `!` before the colon or a `BREAKING CHANGE:` footer, and explain the impact and required migration in the commit body.
 - Keep commit titles and descriptions short and clear.
 - Use clear pull request titles and short descriptions that summarize the change and relevant validation.
 - Do not include Codex as a commit co-author or add a `Co-authored-by` trailer attributing a commit to Codex.
@@ -69,3 +72,43 @@ Treat these as future possibilities, not implicit implementation requirements.
 - Build the project with `dotnet build` after relevant code changes.
 - Add focused tests for non-UI logic and manually verify global hotkeys, region capture, overlays, multi-monitor behavior, and DPI scaling when those features are changed.
 - Run the acceptance harness with `dotnet run --project Tests/ScreenTranslate.Tests.csproj -- Tests/Artifacts`. Use temporary settings and model-discovery fixtures; never modify a user's installed models or imply fixtures verify actual translation. Report automated, rendered-UI, and physical-desktop verification separately.
+
+## Requirement Development Iteration
+
+For each development requirement, continuously follow this loop within the authorized scope:
+
+`Define acceptance criteria -> inspect -> implement -> review -> validate -> fix and repeat -> complete`
+
+1. **Define the requirement.** State the expected user-visible behavior and concrete acceptance criteria, including relevant failure and cancellation paths. Identify affected components and applicable Version 1.0 constraints. Resolve routine implementation choices independently; ask only when missing information prevents correct progress.
+2. **Inspect and plan.** Read the relevant implementation, tests, and project guidance. Identify the smallest complete change, likely regression risks, and the checks needed to demonstrate each acceptance criterion.
+3. **Implement.** Complete the behavior across the affected components, including error handling and resource cleanup. Add or update focused tests for non-UI logic and regressions. Preserve unrelated user changes and avoid expanding scope.
+4. **Review the actual diff.** Check the implementation against every acceptance criterion. Look for correctness defects, regressions, async and cancellation issues, resource leaks, settings compatibility problems, and violations of offline-first or privacy-first behavior. Fix actionable findings before completion.
+5. **Validate.** After relevant code changes, run `dotnet build` and `dotnet run --project Tests/ScreenTranslate.Tests.csproj -- Tests/Artifacts`, plus focused checks appropriate to the change. Perform required UI and physical-desktop verification when the affected features require it. Inspect actual results; do not treat a command being started as a passing check.
+6. **Repeat until ready.** If review or validation finds a defect, failed test, or unmet acceptance criterion, return to implementation, fix it, review the updated diff, and rerun the affected checks and required validation. Continue without asking for confirmation for routine fixes within scope. Do not stop at the first implementation or merely propose fixes that can be completed now. Once the completion criteria are met, finish rather than repeating unchanged checks indefinitely.
+7. **Report completion or a concrete blocker.** Summarize the implemented behavior, review outcome, validation results, and any remaining limitations. If progress requires unavailable tools, credentials, hardware, a user decision, or approval, complete independent work first, then identify the exact blocker and what is needed to continue. Do not claim completion while required verification remains blocked.
+
+### Iteration Record
+
+Use this concise structure in the development plan or progress notes; update it as the work advances rather than creating a new repository file unless requested:
+
+```text
+Requirement: <behavior being implemented>
+Acceptance criteria: <observable outcomes and relevant failure cases>
+Iteration: <number>
+Implementation: <changes made and affected components>
+Review: <findings and their resolution, or no outstanding findings>
+Validation:
+  Automated: <commands and pass/fail/not-run results>
+  Rendered UI: <checks and results, or not applicable with reason>
+  Physical desktop: <checks and results, or not applicable with reason>
+Remaining work or blockers: <specific items, or none>
+Status: <in progress / blocked / complete>
+```
+
+### Completion Criteria
+
+- All acceptance criteria are implemented and verified.
+- The final diff has been reviewed and no known actionable defects introduced by the change remain unresolved.
+- All required builds, tests, and applicable manual checks pass against the final implementation. Explain unrelated pre-existing failures explicitly; do not describe a failing suite as passing.
+- No required checks are skipped or blocked. A check may be marked not applicable only with a reason tied to the change; documentation-only changes do not require a build or acceptance-harness run.
+- The final report distinguishes automated, rendered-UI, and physical-desktop evidence. State that no defects were found in the performed review and checks when accurate; never claim that testing proves the absence of all bugs.
