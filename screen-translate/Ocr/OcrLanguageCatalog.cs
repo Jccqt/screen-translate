@@ -18,6 +18,7 @@ public sealed class OcrLanguageCatalog
     {
         try
         {
+            using var lease = Models.ModelUse.AcquireRead(dataDirectory);
             cancellationToken.ThrowIfCancellationRequested();
             // Enumerate directly: Directory.Exists would conceal access errors as a missing folder.
             var languages = new List<OcrLanguage>();
@@ -49,6 +50,7 @@ public sealed class OcrLanguageCatalog
                 .ThenBy(language => language.Code, StringComparer.OrdinalIgnoreCase).ToArray());
         }
         catch (DirectoryNotFoundException) { return new OcrLanguageScan([]); }
+        catch (Models.ModelInUseException error) { return new([], error.Message); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return new OcrLanguageScan([], "Cannot read the OCR data folder. Choose an accessible local folder and refresh.");

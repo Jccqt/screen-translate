@@ -24,12 +24,20 @@ internal static partial class Program
         Directory.CreateDirectory(Root);
         try
         {
+            if (args.Contains("--models-preview"))
+            {
+                Application.Run(new screen_translate.Interface.ModelManagerForm(screen_translate.Models.ModelPurpose.Ocr,
+                    Directory.CreateDirectory(Path.Combine(Root, "tessdata")).FullName));
+                return 0;
+            }
             TestCatalog();
             TestSettings();
             TestOcrModelLoading().GetAwaiter().GetResult();
             TestTranslationCatalog();
             TestTargetSettings();
             TestTranslationResults().GetAwaiter().GetResult();
+            TestOfflineModels().GetAwaiter().GetResult();
+            TestOfflineModelRecovery().GetAwaiter().GetResult();
             TestInterfaceSettingsAndReadiness();
             TestLifetime();
             TestNativeShortcut();
@@ -129,6 +137,8 @@ internal static partial class Program
                 Capture(form, artifactDirectory, "desktop-constrained-launch");
                 form.Size = launchSize;
                 await TestMainInterfaceUi(form, artifactDirectory);
+                await TestOfflineModelsUi(artifactDirectory);
+                await TestOfflineModelRecoveryUi(artifactDirectory);
                 Install(data, "eng");
                 Install(data, "jpn");
                 Install(data, "chi_sim");

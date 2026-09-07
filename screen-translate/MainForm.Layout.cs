@@ -321,6 +321,23 @@ public partial class MainForm
         _responsiveLayouts.Add(() => ModelLayout(translation, translationTitle, translationDescription, _translationModelStatus, _targetStatus, _translationFolder, translationActions, _targetSettingsError));
         _settingsError.TextChanged += (_, _) => { UpdateSettingsErrors(); LayoutPages(); };
         _targetSettingsError.TextChanged += (_, _) => { UpdateSettingsErrors(); LayoutPages(); };
+        var management = Card("ModelManagementCard");
+        var managementTitle = TextLabel("Download, import and inspect", 12, true);
+        var managementHint = TextLabel("Review sources and licenses, validate OCR data, or remove identified model files.", 9.5F, muted: true);
+        var manageOcr = ActionButton("Manage OCR…", "ManageOcrModels");
+        var manageTranslation = ActionButton("Manage translation…", "ManageTranslationModels");
+        manageOcr.Click += async (_, _) => await OpenModelManagerAsync(Models.ModelPurpose.Ocr);
+        manageTranslation.Click += async (_, _) => await OpenModelManagerAsync(Models.ModelPurpose.Translation);
+        management.Controls.AddRange([managementTitle, managementHint, manageOcr, manageTranslation]);
+        _modelsPage.Controls.Add(management);
+        _responsiveLayouts.Add(() =>
+        {
+            managementTitle.SetBounds(U(24), U(16), management.Width - U(48), U(28));
+            managementHint.SetBounds(U(24), U(50), management.Width - U(48), U(44));
+            manageOcr.SetBounds(U(24), U(104), U(160), U(38));
+            manageTranslation.SetBounds(U(196), U(104), U(210), U(38));
+            management.Height = U(162);
+        });
         var footer = TextLabel("Model files stay on this device. Finding a package does not verify that an engine can load it.", 9F, muted: true);
         footer.Name = "ModelsFooter";
         _modelsPage.Controls.Add(footer);

@@ -36,7 +36,11 @@ public sealed class TranslationProcessor(ITranslationModelCatalog catalog, ITran
         if (engine is null)
             throw new InvalidOperationException("The offline translation engine is not available in this build yet.");
         cancellationToken.ThrowIfCancellationRequested();
-        string output = await engine.TranslateAsync(recognized.Text, model, cancellationToken).WaitAsync(cancellationToken).ConfigureAwait(false);
+        string output = "";
+        await Models.ModelUse.RunAsync(modelDirectory, async () =>
+        {
+            output = await engine.TranslateAsync(recognized.Text, model, cancellationToken).ConfigureAwait(false);
+        }).WaitAsync(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(output)) throw new InvalidOperationException("The translation engine returned no text.");
         return new(recognized, output, target.Code, TranslationSkipped: false);
