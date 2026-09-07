@@ -26,12 +26,16 @@ public sealed class ArgosTranslationModelCatalog : ITranslationModelCatalog
         int ignored = 0;
         try
         {
+            using var lease = Models.ModelUse.AcquireRead(directory);
             cancellationToken.ThrowIfCancellationRequested();
             foreach (string package in System.IO.Directory.EnumerateDirectories(directory).Order(StringComparer.OrdinalIgnoreCase))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (Models.ModelPackage.IsTransaction(package)) continue;
                 try
                 {
+                    var inspection = Models.ModelPackage.Inspect(Models.ModelPurpose.Translation, package);
+                    if (inspection.State != Models.ModelInstallState.Discovered) { ignored++; continue; }
                     using var metadata = JsonDocument.Parse(File.ReadAllText(Path.Combine(package, "metadata.json")));
                     var root = metadata.RootElement;
                     string? source = root.GetProperty("from_code").GetString();
@@ -59,6 +63,7 @@ public sealed class ArgosTranslationModelCatalog : ITranslationModelCatalog
             return new(models, IgnoredPackages: ignored);
         }
         catch (DirectoryNotFoundException) { return new([]); }
+        catch (Models.ModelInUseException error) { return new([], error.Message); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return new([], "Cannot read the translation model folder. Choose an accessible local folder and refresh.");

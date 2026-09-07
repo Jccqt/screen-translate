@@ -279,10 +279,12 @@ public partial class MainForm
             tab.ForeColor = selected ? (_darkTheme ? DarkAccent : Accent) : MapFore(Muted);
         }
         foreach (var badge in new[] { _ocrModelStatus, _translationModelStatus })
-            badge.ForeColor = badge.Text is "●  Installed" or "●  Not required" or "●  Validated" ? ModelGoodColor
+            badge.ForeColor = badge.Text is "●  Discovered" or "●  Not required" or "●  Validated" ? ModelGoodColor
                 : badge.Text.Contains("Checking") ? MapFore(Muted) : ModelWarningColor;
         foreach (var result in OwnedForms.OfType<TranslationResultForm>())
             result.ApplyTheme(_darkTheme ? DarkSurface : Surface, _darkTheme ? DarkInk : Ink);
+        foreach (var manager in OwnedForms.OfType<ModelManagerForm>())
+            manager.ApplyTheme(_darkTheme ? DarkSurface : Surface, _darkTheme ? DarkInk : Ink);
         UpdateReadiness();
         Invalidate(true);
     }

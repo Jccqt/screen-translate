@@ -17,3 +17,5 @@ No OCR or translation weights are bundled by this change. User-installed model l
 For acceptance verification only, we downloaded `eng.traineddata` from [tessdata_fast, tag 4.1.0](https://github.com/tesseract-ocr/tessdata_fast/tree/4.1.0), licensed under [Apache-2.0](https://github.com/tesseract-ocr/tessdata_fast/blob/4.1.0/LICENSE). It is held in ignored `Tests/Artifacts/ocr-validation-data` and copied into temporary test folders before testing. SHA-256: `7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2`.
 
 Synthetic translation-package fixtures do not contain translation weights and do not verify actual translation.
+
+Requirement 1.4's download-review form also offers the same upstream English OCR model as an optional, user-initiated download. Its URL, Apache-2.0 license, version and pinned SHA-256 are shown before starting. No weights are bundled. Custom downloads require users to review their individual publisher's license and checksum; imported absent metadata is labeled Unknown. No translation-model license is inferred from the Argos or CTranslate2 code licenses.

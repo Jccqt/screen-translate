@@ -43,8 +43,8 @@ public partial class MainForm
             : _sourceScanError is not null ? "●  Cannot check"
             : SelectedSourceLanguageCode is null ? (_sourceLanguage.Items.Count > 0 ? "●  Select source" : "●  Not installed")
             : _ocrValidationError is not null ? "●  Load failed"
-            : _ocrValidated ? "●  Validated" : "●  Installed";
-        _ocrModelStatus.ForeColor = _ocrModelStatus.Text is "●  Installed" or "●  Validated" ? ModelGoodColor : ModelWarningColor;
+            : _ocrValidated ? "●  Validated" : "●  Discovered";
+        _ocrModelStatus.ForeColor = _ocrModelStatus.Text is "●  Discovered" or "●  Validated" ? ModelGoodColor : ModelWarningColor;
         _sourceStatus.Text = _sourceScanError ?? _ocrValidationMessage ?? SourceSelectionIssue ??
             $"{_sourceLanguage.Items.Count} installed OCR language(s). Use Validate OCR data to check the selected language with Tesseract.";
         _sourceStatus.AccessibleDescription = _sourceStatus.Text;
@@ -64,9 +64,10 @@ public partial class MainForm
         _ocrValidationMessage = $"Loading OCR data for '{code}' with Tesseract…";
         UpdateSourceStatus();
         string? error = null;
-        try { await _ocrEngine.ValidateLanguageAsync(directory, code, WorkCancellationToken).WaitAsync(WorkCancellationToken); }
+        try { await Models.ModelUse.RunAsync(directory, () => _ocrEngine.ValidateLanguageAsync(directory, code, WorkCancellationToken)).WaitAsync(WorkCancellationToken); }
         catch (OperationCanceledException) when (WorkCancellationToken.IsCancellationRequested) { return; }
         catch (OcrModelLoadException exception) { error = exception.Message; }
+        catch (IOException exception) { error = exception.Message; }
         if (_lifetime.IsStopped || version != _ocrValidationVersion) return;
         _validatingOcr = false;
         _validateOcr.Enabled = true;

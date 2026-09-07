@@ -1,5 +1,7 @@
 # Requirement 1.3: Target language
 
+Requirement [1.4 Offline models](offline-models-1.4.md) adds package management, stricter structural checks and transaction-aware discovery. Its **Discovered** badge supersedes the historical **Installed** wording below; engine compatibility still requires actual loading.
+
 Users can select the output language independently of model installation. Availability is checked for the selected source-to-target direction, and the selection and translation folder survive restart. Identical-language OCR results bypass translation and use the shared result and copy controls.
 
 ## Review of the updated requirement

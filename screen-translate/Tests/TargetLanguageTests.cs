@@ -94,7 +94,7 @@ internal static partial class Program
         Check(form.SelectedTranslationModel is null, "UI rejects installed package for another source");
         string package = InstallTranslation(directory, "ja", "fr");
         await form.RefreshTranslationModelsAsync();
-        Check(badge.Text.Contains("Installed") && form.SelectedTranslationModel?.Directory == package, "Installed pair updates badge and exposes package");
+        Check(badge.Text.Contains("Discovered") && form.SelectedTranslationModel?.Directory == package, "Discovered pair updates badge without claiming engine validation");
         Capture(form, artifactDirectory, "target-installed");
         using (var reopened = CreateMainForm(sourceStore, targetStore))
         {

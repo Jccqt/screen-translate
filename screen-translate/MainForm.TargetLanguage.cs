@@ -162,7 +162,7 @@ public partial class MainForm
             TranslationModelState.UnsupportedSource => ("Unknown source", "This OCR model has no known translation language code. Choose a supported OCR source language."),
             TranslationModelState.NotRequired => ("Not required", "Source and output languages are the same. Translation is skipped; recognized text is returned unchanged in the result and copy controls. No translation model is required."),
             TranslationModelState.ReadError => ("Cannot check", _translationScan.Error!),
-            TranslationModelState.Installed => ("Installed", $"Translation model installed for {pair} (local files found)."),
+            TranslationModelState.Installed => ("Discovered", $"Translation package discovered for {pair}. Local files found; engine compatibility is unvalidated."),
             _ => ("Not installed", $"No offline translation model installed for {pair}. Choose a folder containing an extracted Argos package for this direction, then refresh.")
         };
         if (_translationScan.IgnoredPackages > 0 && availability.State is TranslationModelState.Installed or TranslationModelState.Missing)
