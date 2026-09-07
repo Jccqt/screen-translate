@@ -37,6 +37,7 @@ internal static partial class Program
             TestTargetSettings();
             TestTranslationResults().GetAwaiter().GetResult();
             TestOfflineModels().GetAwaiter().GetResult();
+            TestOfflineModelRecovery().GetAwaiter().GetResult();
             TestInterfaceSettingsAndReadiness();
             TestLifetime();
             TestNativeShortcut();
@@ -137,6 +138,7 @@ internal static partial class Program
                 form.Size = launchSize;
                 await TestMainInterfaceUi(form, artifactDirectory);
                 await TestOfflineModelsUi(artifactDirectory);
+                await TestOfflineModelRecoveryUi(artifactDirectory);
                 Install(data, "eng");
                 Install(data, "jpn");
                 Install(data, "chi_sim");

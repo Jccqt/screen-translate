@@ -23,7 +23,6 @@ public sealed class ModelManagerForm : Form
     private bool _closeAfterWork;
     private int _scanVersion;
     private bool _disposed;
-    private readonly Dictionary<string, string> _loadFailures = new(StringComparer.OrdinalIgnoreCase);
 
     public ModelManagerForm(ModelPurpose purpose, string root, ModelManager? manager = null)
     {
@@ -106,7 +105,8 @@ public sealed class ModelManagerForm : Form
         try
         {
             var models = (await Task.Run(() => _manager.Scan(_purpose, _root, _lifetime.Token)))
-                .Select(m => _loadFailures.TryGetValue(m.Location, out string? failure)
+                .Select(m => m.Purpose == ModelPurpose.Ocr && m.State == ModelInstallState.Discovered &&
+                    _manager.ValidationHistory.Failure(m.Location) is string failure
                     ? m with { State = ModelInstallState.Invalid, Explanation = failure } : m).ToArray();
             if (IsDisposed || version != _scanVersion) return;
             string? selected = (_models.SelectedItem as ModelDetails)?.Location;
@@ -117,7 +117,7 @@ public sealed class ModelManagerForm : Form
             _status.Text = $"{models.Length} local model(s). Discovered files require engine loading before validation.";
         }
         catch (OperationCanceledException) when (_disposed || _lifetime.IsCancellationRequested) { }
-        catch (Exception error) when (Recoverable(error)) { if (!IsDisposed) { _models.Items.Clear(); _details.Text = "Cannot check: " + error.Message; } }
+        catch (Exception error) when (Recoverable(error)) { if (!IsDisposed && version == _scanVersion) { _models.Items.Clear(); _details.Text = "Cannot check: " + error.Message; } }
         finally { if (!IsDisposed && version == _scanVersion) _models.Enabled = _work is null; }
     }
 
@@ -151,13 +151,7 @@ public sealed class ModelManagerForm : Form
         }
         await Run(async token =>
         {
-            try
-            {
-                await ModelUse.RunAsync(_root, () => new TesseractOcrEngine().ValidateLanguageAsync(_root,
-                    Path.GetFileNameWithoutExtension(selected.Location), token));
-                _loadFailures.Remove(selected.Location);
-            }
-            catch (OcrModelLoadException error) { _loadFailures[selected.Location] = error.Message; throw; }
+            await _manager.ValidateOcrAsync(_root, Path.GetFileNameWithoutExtension(selected.Location), token);
         }, afterSuccess: () =>
         {
             if (_models.SelectedItem is ModelDetails model && model.Location == selected.Location)

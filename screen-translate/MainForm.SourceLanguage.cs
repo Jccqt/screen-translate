@@ -13,7 +13,8 @@ public partial class MainForm
     private int _ocrValidationVersion;
     // Retain the last failure for each model in this session, including across selection changes.
     // Discovery cannot prove that replacement data has repaired an engine-load failure.
-    private readonly Dictionary<string, string> _ocrLoadFailures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Models.OcrValidationHistory _ocrValidationHistory = new();
+    private string? _ocrValidationBlock;
 
     private string OcrModelKey(string code) => Path.GetFullPath(Path.Combine(OcrDataDirectory, code + ".traineddata"));
 
@@ -31,8 +32,9 @@ public partial class MainForm
         ++_ocrValidationVersion;
         _validatingOcr = false;
         _ocrValidated = false;
+        _ocrValidationBlock = null;
         _ocrValidationError = SelectedSourceLanguageCode is string code
-            ? _ocrLoadFailures.GetValueOrDefault(OcrModelKey(code)) : null;
+            ? _ocrValidationHistory.Failure(OcrModelKey(code)) : null;
         _ocrValidationMessage = _ocrValidationError;
         _validateOcr.Enabled = SelectedSourceLanguageCode is not null;
     }
@@ -41,6 +43,7 @@ public partial class MainForm
     {
         _ocrModelStatus.Text = _checkingSourceLanguages || _validatingOcr ? "●  Checking…"
             : _sourceScanError is not null ? "●  Cannot check"
+            : _ocrValidationBlock is not null ? "●  In use"
             : SelectedSourceLanguageCode is null ? (_sourceLanguage.Items.Count > 0 ? "●  Select source" : "●  Not installed")
             : _ocrValidationError is not null ? "●  Load failed"
             : _ocrValidated ? "●  Validated" : "●  Discovered";
@@ -61,21 +64,23 @@ public partial class MainForm
         _validatingOcr = true;
         _validateOcr.Enabled = false;
         _ocrValidated = false;
+        _ocrValidationBlock = null;
         _ocrValidationMessage = $"Loading OCR data for '{code}' with Tesseract…";
         UpdateSourceStatus();
         string? error = null;
-        try { await Models.ModelUse.RunAsync(directory, () => _ocrEngine.ValidateLanguageAsync(directory, code, WorkCancellationToken)).WaitAsync(WorkCancellationToken); }
+        string? block = null;
+        try { await _ocrValidationHistory.ValidateAsync(_ocrEngine, directory, code, WorkCancellationToken).WaitAsync(WorkCancellationToken); }
         catch (OperationCanceledException) when (WorkCancellationToken.IsCancellationRequested) { return; }
+        catch (Models.ModelInUseException exception) { block = exception.Message; }
         catch (OcrModelLoadException exception) { error = exception.Message; }
         catch (IOException exception) { error = exception.Message; }
         if (_lifetime.IsStopped || version != _ocrValidationVersion) return;
         _validatingOcr = false;
         _validateOcr.Enabled = true;
-        if (error is null) _ocrLoadFailures.Remove(modelKey);
-        else _ocrLoadFailures[modelKey] = error;
-        _ocrValidationError = error;
-        _ocrValidated = error is null;
-        _ocrValidationMessage = error ?? $"Tesseract successfully loaded OCR data for '{code}'.";
+        _ocrValidationBlock = block;
+        _ocrValidationError = error ?? _ocrValidationHistory.Failure(modelKey);
+        _ocrValidated = error is null && block is null;
+        _ocrValidationMessage = block ?? error ?? $"Tesseract successfully loaded OCR data for '{code}'.";
         UpdateSourceStatus();
     }
 }

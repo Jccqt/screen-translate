@@ -25,7 +25,7 @@ public partial class MainForm
     private bool TranslationCheckPending => _checkingTranslationModels || _checkingSourceLanguages || _validatingOcr ||
         _translationScanRevision != _translationMonitor.Revision;
 
-    private string? TranslationSourceIssue => _sourceScanError ?? _ocrValidationError ?? SourceSelectionIssue;
+    private string? TranslationSourceIssue => _sourceScanError ?? _ocrValidationBlock ?? _ocrValidationError ?? SourceSelectionIssue;
 
     private void InitializeTranslationMonitoring()
     {

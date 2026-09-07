@@ -9,11 +9,16 @@ namespace screen_translate.Models;
 public sealed record ModelTransferProgress(long Bytes, long? Total, string Phase);
 
 /// <summary>All writes are staged on the destination volume. Publication is the last, non-cancellable step.</summary>
-public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpClient = null)
+public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpClient = null,
+    OcrValidationHistory? validationHistory = null)
 {
     private static readonly HttpClient Client = new(new HttpClientHandler { AllowAutoRedirect = false })
         { Timeout = TimeSpan.FromMinutes(30) };
     private readonly IOcrEngine _ocr = ocrEngine ?? new TesseractOcrEngine();
+    public OcrValidationHistory ValidationHistory { get; } = validationHistory ?? new();
+
+    public Task ValidateOcrAsync(string root, string code, CancellationToken token) =>
+        ValidationHistory.ValidateAsync(_ocr, root, code, token);
     private const long MaxBytes = 8L * 1024 * 1024 * 1024;
     private const int MaxEntries = 20000;
 
@@ -23,7 +28,9 @@ public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpC
         ModelPackage.NoLinks(root);
         try
         {
-            var paths = purpose == ModelPurpose.Ocr ? Directory.EnumerateFiles(root, "*.traineddata") : Directory.EnumerateDirectories(root);
+            var paths = purpose == ModelPurpose.Ocr ? Directory.EnumerateFiles(root, "*.traineddata")
+                .Concat(Directory.EnumerateFiles(root, "*.traineddata" + ModelPackage.Receipt).Select(p => p[..^ModelPackage.Receipt.Length]))
+                .Distinct(StringComparer.OrdinalIgnoreCase) : Directory.EnumerateDirectories(root);
             return paths.Where(p => !ModelPackage.IsTransaction(p)).Order(StringComparer.OrdinalIgnoreCase)
                 .Select(p => { token.ThrowIfCancellationRequested(); return ModelPackage.Inspect(purpose, p); }).ToArray();
         }
@@ -115,7 +122,7 @@ public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpC
         string[] owned = purpose == ModelPurpose.Ocr ? [Path.GetFileName(location)] :
             EnumerateSafeFiles(location).Select(p => Path.GetRelativePath(location, p)).ToArray();
         var receipt = new ModelReceipt(download?.Source.ToString() ?? staged.Source,
-            download?.License ?? staged.License, download?.Version ?? staged.Version, owned);
+            download?.License ?? staged.License, download?.Version ?? staged.Version, owned, staged.Name, staged.Language);
         string receiptPath = purpose == ModelPurpose.Ocr ? location + ModelPackage.Receipt : Path.Combine(location, ModelPackage.Receipt);
         await File.WriteAllTextAsync(receiptPath, JsonSerializer.Serialize(receipt), token).ConfigureAwait(false);
         string destination = ModelPackage.SafePath(root, purpose == ModelPurpose.Ocr ? Path.GetFileName(location) :
@@ -123,6 +130,7 @@ public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpC
         progress?.Report(new(0, null, "Installing local files"));
         token.ThrowIfCancellationRequested();
         Publish(purpose, location, destination, stage, replace);
+        if (purpose == ModelPurpose.Ocr) ValidationHistory.Loaded(destination);
         return ModelPackage.Inspect(purpose, destination);
     }
 
@@ -193,6 +201,9 @@ public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpC
         var current = ModelPackage.Inspect(selected.Purpose, expected);
         if (!current.Files.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(selected.Files))
             throw new IOException("The model's identified files changed. Refresh and review it before removal.");
+        foreach (string file in current.Files)
+            if ((File.GetAttributes(file) & FileAttributes.ReadOnly) != 0)
+                throw new IOException("Removal is blocked by a read-only model file: " + file + ". Clear its read-only attribute and retry.");
         string stage = CreateStage(root);
         string recovery = Path.Combine(stage, "preserve-backups");
         File.WriteAllText(recovery, "Do not delete: a removal transaction may need recovery.");
@@ -216,12 +227,23 @@ public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpC
             File.Delete(recovery);
             throw;
         }
-        finally { CleanStage(stage); }
+        finally { CleanStage(stage, reportFailure: true); }
         // Deliberately no recursive deletion of the package or user-selected folder.
         if (selected.Purpose == ModelPurpose.Translation)
-            foreach (string directory in current.Files.Select(Path.GetDirectoryName).OfType<string>().Append(expected)
-                .Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(p => p.Length))
+        {
+            var knownDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { expected };
+            foreach (string file in current.Files)
+                for (string? directory = Path.GetDirectoryName(file); directory is not null; directory = Path.GetDirectoryName(directory))
+                {
+                    knownDirectories.Add(directory);
+                    if (directory.Equals(expected, StringComparison.OrdinalIgnoreCase)) break;
+                }
+            foreach (string directory in knownDirectories.OrderByDescending(p => p.Length))
+            {
+                ModelPackage.NoLinks(directory);
                 if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
+            }
+        }
     }
 
     private static string CreateStage(string root)
@@ -232,7 +254,7 @@ public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpC
         return Directory.CreateDirectory(Path.Combine(root, ".st-" + Guid.NewGuid().ToString("N"))).FullName;
     }
 
-    private static void CleanStage(string stage)
+    private static void CleanStage(string stage, bool reportFailure = false)
     {
         // Only fresh, private transaction directories; never a configured root or selected package.
         if (!ModelPackage.IsTransaction(stage) || !Directory.Exists(stage) || File.Exists(Path.Combine(stage, "preserve-backups"))) return;
@@ -242,9 +264,12 @@ public sealed class ModelManager(IOcrEngine? ocrEngine = null, HttpClient? httpC
             foreach (string dir in Directory.GetDirectories(stage, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length)) Directory.Delete(dir);
             Directory.Delete(stage);
         }
-        catch (IOException) { /* An interrupted cleanup remains excluded from discovery. */ }
-        catch (InvalidDataException) { /* Never follow a link introduced during cleanup. */ }
-        catch (UnauthorizedAccessException) { }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            // Preserve remaining data and identify the exact private directory for recovery.
+            if (reportFailure) throw new IOException("Model removal did not finish cleaning up its files. Remaining data is in " + stage +
+                ". Resolve the file access problem before removing this transaction directory. " + error.Message, error);
+        }
     }
 
     private static IEnumerable<string> EnumerateSafeFiles(string root)
