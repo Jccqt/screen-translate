@@ -4,7 +4,7 @@ using screen_translate.Translation;
 namespace screen_translate.Interface;
 
 /// <summary>Common in-memory result and explicit copy controls for both processing paths.</summary>
-public sealed class TranslationResultForm : Form
+public sealed class TranslationResultForm : ThemedForm
 {
     public TranslationResultForm(TranslationResult result, Action<string>? copyText = null)
     {
@@ -41,7 +41,7 @@ public sealed class TranslationResultForm : Form
         var error = new Label { Name = "CopyError", AutoSize = true, Dock = DockStyle.Fill };
         void AddCopy(string title, string name, string text)
         {
-            var button = new Button { Name = name, Text = title, AutoSize = true };
+            var button = new PillButton { Name = name, Text = title, AutoSize = true };
             button.Click += (_, _) =>
             {
                 try { copyText(text); error.Text = "Copied."; }
@@ -52,7 +52,7 @@ public sealed class TranslationResultForm : Form
         }
         AddCopy("Copy original", "CopyOriginal", result.Original.Text);
         AddCopy("Copy output", "CopyOutput", result.OutputText);
-        var close = new Button { Text = "Close", AutoSize = true };
+        var close = new PillButton { Text = "Close", AutoSize = true };
         close.Click += (_, _) => Close();
         actions.Controls.Add(close);
         CancelButton = close;
@@ -61,14 +61,4 @@ public sealed class TranslationResultForm : Form
         Controls.Add(layout);
     }
 
-    public void ApplyTheme(Color background, Color foreground)
-    {
-        void Apply(Control control)
-        {
-            control.BackColor = background;
-            control.ForeColor = foreground;
-            foreach (Control child in control.Controls) Apply(child);
-        }
-        Apply(this);
-    }
 }

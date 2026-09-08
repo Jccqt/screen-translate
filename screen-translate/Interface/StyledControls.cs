@@ -100,14 +100,17 @@ internal class PillButton : Button
         var bounds = new RectangleF(.5F, .5F, Width - 1, Height - 1);
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
         Color fill = BackColor;
-        if (_hover && Enabled) fill = Blend(fill, ForeColor, _pressed ? .14F : .07F);
+        // Keep low-emphasis navigation/appearance fills stable so hover never reduces text contrast.
+        if (_hover && Enabled && !IsTab && !IsSegment)
+            fill = Blend(fill, Primary && ForeColor == Color.White ? Color.Black : ForeColor, _pressed ? .14F : .07F);
         using var path = RoundedPanel.RoundedPath(bounds, LogicalToDeviceUnits(CornerRadius));
         using var brush = new SolidBrush(fill);
         using var pen = new Pen(BorderColor);
         g.FillPath(brush, path);
         if (!IsTab) g.DrawPath(pen, path);
-        Color textColor = Enabled ? ForeColor : Blend(ForeColor, BackColor, .5F);
-        TextRenderer.DrawText(g, Text, Font, ClientRectangle, textColor,
+        Color textColor = Enabled ? ForeColor : (BackColor.GetBrightness() < .5F
+            ? Color.FromArgb(163, 182, 183) : Color.FromArgb(94, 111, 112));
+        TextRenderer.DrawText(g, IsSegment && Selected ? "✓ " + Text : Text, Font, ClientRectangle, textColor,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         if (IsTab && Selected)
         {
@@ -151,6 +154,12 @@ internal sealed class LanguagePicker : ComboBox
         TextRenderer.DrawText(e.Graphics, text, Font, bounds,
             Enabled ? ForeColor : (dark ? Color.FromArgb(163, 182, 183) : Color.FromArgb(94, 111, 112)),
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+        if (dropdownSelection)
+        {
+            using var border = new Pen(ForeColor);
+            e.Graphics.DrawRectangle(border, e.Bounds.X, e.Bounds.Y, e.Bounds.Width - 1, e.Bounds.Height - 1);
+        }
+        e.DrawFocusRectangle();
     }
 
     protected override void WndProc(ref Message message)

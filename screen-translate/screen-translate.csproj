@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ScreenTranslate.Tests" />
     <PackageReference Include="Tesseract" Version="5.2.0" />
   </ItemGroup>
 

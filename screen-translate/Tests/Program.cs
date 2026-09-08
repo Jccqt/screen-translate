@@ -24,6 +24,11 @@ internal static partial class Program
         Directory.CreateDirectory(Root);
         try
         {
+            if (args.Contains("--theme-preview"))
+            {
+                RunThemePreview();
+                return 0;
+            }
             if (args.Contains("--models-preview"))
             {
                 Application.Run(new screen_translate.Interface.ModelManagerForm(screen_translate.Models.ModelPurpose.Ocr,
@@ -39,6 +44,7 @@ internal static partial class Program
             TestOfflineModels().GetAwaiter().GetResult();
             TestOfflineModelRecovery().GetAwaiter().GetResult();
             TestInterfaceSettingsAndReadiness();
+            TestThemePreferences();
             TestLifetime();
             TestNativeShortcut();
             RunUiTests(args.FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "Artifacts"));
@@ -137,6 +143,7 @@ internal static partial class Program
                 Capture(form, artifactDirectory, "desktop-constrained-launch");
                 form.Size = launchSize;
                 await TestMainInterfaceUi(form, artifactDirectory);
+                await TestThemeUi(artifactDirectory);
                 await TestOfflineModelsUi(artifactDirectory);
                 await TestOfflineModelRecoveryUi(artifactDirectory);
                 Install(data, "eng");
