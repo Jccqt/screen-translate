@@ -3,18 +3,18 @@ using screen_translate.Ocr;
 
 namespace screen_translate.Interface;
 
-public sealed class ModelManagerForm : Form
+public sealed class ModelManagerForm : ThemedForm
 {
     private readonly ModelPurpose _purpose;
     private readonly string _root;
     private readonly ModelManager _manager;
-    private readonly ListBox _models = new() { Name = "ModelInventory", Dock = DockStyle.Fill, IntegralHeight = false };
+    private readonly ListBox _models = new ModelInventoryList() { Name = "ModelInventory", Dock = DockStyle.Fill, IntegralHeight = false };
     private readonly TextBox _details = new() { Name = "ModelDetails", Dock = DockStyle.Fill, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Both, WordWrap = false };
     private readonly Label _status = new() { Name = "ModelOperationStatus", Dock = DockStyle.Fill, AutoEllipsis = true };
     private readonly ProgressBar _progress = new() { Name = "ModelProgress", Dock = DockStyle.Fill };
     private readonly FlowLayoutPanel _actions = new() { Dock = DockStyle.Fill, AutoScroll = true };
-    private readonly Button _cancel = new() { Text = "Cancel operation", Name = "CancelModelOperation", AutoSize = true, Enabled = false };
-    private readonly Button _retry = new() { Text = "Retry", Name = "RetryModelOperation", AutoSize = true, Enabled = false };
+    private readonly Button _cancel = new PillButton() { Text = "Cancel operation", Name = "CancelModelOperation", AutoSize = true, Enabled = false };
+    private readonly Button _retry = new PillButton() { Text = "Retry", Name = "RetryModelOperation", AutoSize = true, Enabled = false };
     private readonly CheckBox _replace = new() { Text = "Replace existing model", Name = "ReplaceModel", AutoSize = true };
     private CancellationTokenSource? _work;
     private Func<CancellationToken, Task>? _lastOperation;
@@ -55,7 +55,7 @@ public sealed class ModelManagerForm : Form
         AddAction("Refresh", "RefreshModelInventory", async () => await RefreshModelsAsync());
         AddAction("Package formats", "ModelFormatHelp", () =>
         {
-            MessageBox.Show(this, ModelFormatHelp, "Accepted formats and engine support", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ThemedMessageForm.Show(this, ModelFormatHelp, "Accepted formats and engine support");
             return Task.CompletedTask;
         });
         _actions.Controls.AddRange([_replace, _cancel, _retry]);
@@ -79,19 +79,9 @@ public sealed class ModelManagerForm : Form
         "Packages are limited to 8 GiB and 20,000 entries; links, traversal, duplicate Windows paths and reserved management files are rejected. Imported metadata is Unknown when absent.\r\n\r\n" +
         "Removal requires confirmation and only affects identified files. Unidentified external files are preserved; they can block replacement. Files in use block changes until the operation finishes.";
 
-    public void ApplyTheme(Color surface, Color ink)
-    {
-        void Paint(Control control)
-        {
-            control.BackColor = surface; control.ForeColor = ink;
-            foreach (Control child in control.Controls) Paint(child);
-        }
-        Paint(this);
-    }
-
     private void AddAction(string text, string name, Func<Task> action)
     {
-        var button = new Button { Text = text, Name = name, AutoSize = true, Padding = new Padding(4), Margin = new Padding(3) };
+        var button = new PillButton { Text = text, Name = name, AutoSize = true, Padding = new Padding(4), Margin = new Padding(3) };
         button.Click += async (_, _) => { try { await action(); } catch (Exception error) when (Recoverable(error)) { _status.Text = error.Message; } };
         _actions.Controls.Add(button);
     }
@@ -162,9 +152,9 @@ public sealed class ModelManagerForm : Form
     private async Task Remove()
     {
         if (_models.SelectedItem is not ModelDetails selected) return;
-        if (MessageBox.Show(this, $"Remove {selected.Name}?\r\n{selected.Purpose}: {selected.Language}\r\n{selected.Location}\r\n\r\n" +
+        if (ThemedMessageForm.Show(this, $"Remove {selected.Name}?\r\n{selected.Purpose}: {selected.Language}\r\n{selected.Location}\r\n\r\n" +
             $"Only {selected.Files.Count} identified file(s) will be removed. This may make your selected language unavailable.",
-            "Confirm model removal", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            "Confirm model removal", confirm: true) != DialogResult.Yes) return;
         await Run(token => Task.Run(() => { token.ThrowIfCancellationRequested(); _manager.Remove(selected, _root); }, token), retryable: false);
     }
 

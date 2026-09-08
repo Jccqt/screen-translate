@@ -13,7 +13,7 @@ public partial class MainForm : Form
     private static readonly Color Border = Color.FromArgb(216, 225, 222);
     private static readonly Color Ink = Color.FromArgb(36, 52, 60);
     private static readonly Color Muted = Color.FromArgb(94, 111, 112);
-    private static readonly Color Accent = Color.FromArgb(8, 127, 112);
+    private static readonly Color Accent = Color.FromArgb(8, 118, 104);
     private static readonly Color AccentSoft = Color.FromArgb(231, 244, 240);
     private static readonly Color DarkCanvas = Color.FromArgb(22, 32, 37);
     private static readonly Color DarkSurface = Color.FromArgb(30, 43, 48);
@@ -51,7 +51,7 @@ public partial class MainForm : Form
 
     public MainForm(SourceLanguageSettingsStore settingsStore, TargetLanguageSettingsStore targetSettingsStore,
         ITranslationModelCatalog? translationCatalog = null, InterfaceSettingsStore? interfaceSettingsStore = null,
-        IGlobalShortcut? globalShortcut = null, IOcrEngine? ocrEngine = null)
+        IGlobalShortcut? globalShortcut = null, IOcrEngine? ocrEngine = null, ISystemThemeSource? systemThemeSource = null)
     {
         _settingsStore = settingsStore;
         _ocrEngine = ocrEngine ?? new TesseractOcrEngine();
@@ -64,6 +64,8 @@ public partial class MainForm : Form
         _interfaceSettings = _interfaceSettingsStore.Load(out string? interfaceError);
         _globalShortcut = globalShortcut ?? new GlobalShortcut();
         _lifetime.Own(_globalShortcut);
+        _systemThemeSource = systemThemeSource ?? new WindowsSystemThemeSource();
+        _lifetime.Own(_systemThemeSource);
         InitializeComponent();
         BuildInterface();
         InitializeInterfaceBehavior(interfaceError);

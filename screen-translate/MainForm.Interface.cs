@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Microsoft.Win32;
 using screen_translate.Interface;
 using screen_translate.Settings;
 
@@ -20,9 +19,12 @@ public partial class MainForm
     private string? _sourceScanError;
     private string? _shortcutError = "The global shortcut has not been registered yet.";
     private bool _darkTheme;
+    private readonly ISystemThemeSource _systemThemeSource;
+    internal Color DialogSurface => _darkTheme ? DarkSurface : Surface;
+    internal Color DialogInk => _darkTheme ? DarkInk : Ink;
     private bool _mainWindowShown;
     private Color ModelGoodColor => _darkTheme ? Color.FromArgb(133, 218, 166) : Color.FromArgb(45, 112, 72);
-    private Color ModelWarningColor => _darkTheme ? Color.FromArgb(255, 199, 123) : Color.FromArgb(173, 104, 27);
+    private Color ModelWarningColor => _darkTheme ? Color.FromArgb(255, 199, 123) : Color.FromArgb(158, 90, 20);
     private readonly Dictionary<Control, (Color Back, Color Fore)> _originalColors = [];
     private readonly Dictionary<RoundedPanel, Color> _originalBorders = [];
     private readonly Dictionary<Control, (string Family, float Pixels, FontStyle Style)> _fontSpecs = [];
@@ -45,7 +47,9 @@ public partial class MainForm
     public void ShowTranslationWindow(Form window)
     {
         if (_lifetime.IsStopped) { window.Dispose(); return; }
+        ThemeWindows.Apply(window, DialogSurface, DialogInk);
         window.Show(this);
+        ThemeWindows.ApplyTitleBar(window, _darkTheme);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -59,7 +63,7 @@ public partial class MainForm
     private void StopApplicationWork()
     {
         if (_lifetime.IsStopped) return;
-        SystemEvents.UserPreferenceChanged -= SystemPreferenceChanged;
+        _systemThemeSource.Changed -= SystemPreferenceChanged;
         _lifetime.Dispose();
         // Dispose bypasses child Close cancellation: no selection or overlay may keep the app alive.
         foreach (var window in OwnedForms) window.Dispose();
@@ -86,7 +90,7 @@ public partial class MainForm
         }
         RememberColors(this);
         ApplyTypography();
-        SystemEvents.UserPreferenceChanged += SystemPreferenceChanged;
+        _systemThemeSource.Changed += SystemPreferenceChanged;
         ApplyTheme();
         UpdateReadiness();
     }
@@ -216,27 +220,17 @@ public partial class MainForm
         }.Where(error => !string.IsNullOrWhiteSpace(error)));
     }
 
-    private void SystemPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    private void SystemPreferenceChanged(object? sender, EventArgs e)
     {
         if (_lifetime.IsStopped || !IsHandleCreated) return;
-        try { BeginInvoke((Action)(() => { if (!_lifetime.IsStopped) ApplyTheme(); })); }
+        try { BeginInvoke((Action)(() => { if (!_lifetime.IsStopped && _interfaceSettings.Theme == AppTheme.System) ApplyTheme(); })); }
         catch (InvalidOperationException) { } // Handle was destroyed during shutdown.
     }
 
     private void ApplyTheme()
     {
-        bool systemDark = false;
-        if (_interfaceSettings.Theme == AppTheme.System)
-        {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-                systemDark = key?.GetValue("AppsUseLightTheme") is int value && value == 0;
-            }
-            catch (System.Security.SecurityException) { }
-            catch (UnauthorizedAccessException) { }
-        }
-        _darkTheme = _interfaceSettings.Theme == AppTheme.Dark || (_interfaceSettings.Theme == AppTheme.System && systemDark);
+        _darkTheme = WindowsSystemThemeSource.Resolve(_interfaceSettings.Theme,
+            _interfaceSettings.Theme == AppTheme.System && _systemThemeSource.IsDark);
         Color MapBack(Color color)
         {
             if (!_darkTheme || color == Color.Transparent) return color;
@@ -281,10 +275,9 @@ public partial class MainForm
         foreach (var badge in new[] { _ocrModelStatus, _translationModelStatus })
             badge.ForeColor = badge.Text is "●  Discovered" or "●  Not required" or "●  Validated" ? ModelGoodColor
                 : badge.Text.Contains("Checking") ? MapFore(Muted) : ModelWarningColor;
-        foreach (var result in OwnedForms.OfType<TranslationResultForm>())
-            result.ApplyTheme(_darkTheme ? DarkSurface : Surface, _darkTheme ? DarkInk : Ink);
-        foreach (var manager in OwnedForms.OfType<ModelManagerForm>())
-            manager.ApplyTheme(_darkTheme ? DarkSurface : Surface, _darkTheme ? DarkInk : Ink);
+        ThemeWindows.ApplyTitleBar(this, _darkTheme);
+        foreach (var window in OwnedForms)
+            ThemeWindows.Apply(window, DialogSurface, DialogInk);
         UpdateReadiness();
         Invalidate(true);
     }

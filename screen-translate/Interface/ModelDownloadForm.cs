@@ -4,7 +4,7 @@ using screen_translate.Models;
 namespace screen_translate.Interface;
 
 /// <summary>Nothing accesses the network until the user reviews the final descriptor and starts.</summary>
-public sealed class ModelDownloadForm : Form
+public sealed class ModelDownloadForm : ThemedForm
 {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public ModelDownload? Download { get; private set; }
@@ -37,7 +37,7 @@ public sealed class ModelDownloadForm : Form
         var preview = new TextBox { Name = "DownloadDisclosure", ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill };
         layout.Controls.Add(preview, 0, 7); layout.SetColumnSpan(preview, 2);
         layout.RowStyles.Add(new(SizeType.Absolute, 48));
-        var start = new Button { Text = "Start download", Name = "StartModelDownload", AutoSize = true, Dock = DockStyle.Right };
+        var start = new PillButton { Text = "Start download", Name = "StartModelDownload", AutoSize = true, Dock = DockStyle.Right };
         layout.Controls.Add(start, 1, 8);
         Controls.Add(layout);
         ModelDownload Descriptor()
