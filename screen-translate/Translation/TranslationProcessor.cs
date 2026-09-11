@@ -37,10 +37,11 @@ public sealed class TranslationProcessor(ITranslationModelCatalog catalog, ITran
             throw new InvalidOperationException("The offline translation engine is not available in this build yet.");
         cancellationToken.ThrowIfCancellationRequested();
         string output = "";
+        // Keep the caller's operation active until the engine actually stops, even if it ignores cancellation.
         await Models.ModelUse.RunAsync(modelDirectory, async () =>
         {
             output = await engine.TranslateAsync(recognized.Text, model, cancellationToken).ConfigureAwait(false);
-        }).WaitAsync(cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(output)) throw new InvalidOperationException("The translation engine returned no text.");
         return new(recognized, output, target.Code, TranslationSkipped: false);

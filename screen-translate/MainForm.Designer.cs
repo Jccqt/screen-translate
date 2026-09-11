@@ -19,6 +19,14 @@
                 components.Dispose();
             }
             base.Dispose(disposing);
+            if (disposing)
+            {
+                // Closing owned windows can repaint the owner. Release drawing resources after controls.
+                foreach (var font in _dpiFonts.Values) font.Dispose();
+                _dpiFonts.Clear();
+                _tooltips?.Dispose();
+                _artwork.Dispose();
+            }
         }
 
         #region Windows Form Designer generated code
