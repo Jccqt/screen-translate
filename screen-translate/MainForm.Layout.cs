@@ -59,8 +59,6 @@ public partial class MainForm
         Font = new Font("Segoe UI", 10F);
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96, 96);
-        _lifetime.Own(_tooltips);
-        _lifetime.Own(_artwork);
         Icon = _artwork.WindowIcon;
 
         var masthead = new Panel { Name = "Masthead", Dock = DockStyle.Top, Height = 88, BackColor = Surface };
@@ -211,7 +209,7 @@ public partial class MainForm
         _pendingShortcut = _interfaceSettings.Shortcut;
         var inputFrame = Card("ShortcutField");
         inputFrame.CornerRadius = 4;
-        _shortcutInput = new TextBox
+        _shortcutInput = new Interface.ShortcutTextBox
         {
             Name = "GlobalShortcut", AccessibleName = "Global translation shortcut", ReadOnly = true,
             BorderStyle = BorderStyle.None, BackColor = Surface, ForeColor = Ink, Font = new Font("Segoe UI Semibold", 10),
@@ -223,6 +221,7 @@ public partial class MainForm
         var apply = ActionButton("Apply", "ApplyShortcut");
         _shortcutStatus = TextLabel("Use Ctrl or Alt with a letter, number, or F key.", 9F, muted: true);
         _shortcutStatus.Name = "ShortcutStatus";
+        _shortcutStatus.TextChanged += (_, _) => LayoutPages();
         WireShortcutEditor(apply);
         shortcut.Controls.AddRange([shortcutTitle, shortcutHint, inputFrame, apply, _shortcutStatus]);
         preferences.Controls.Add(shortcut);
@@ -237,15 +236,17 @@ public partial class MainForm
             inputFrame.SetBounds(right, U(23), U(264), U(40));
             _shortcutInput.SetBounds(U(12), U(10), U(240), U(24));
             apply.SetBounds(right + U(276), U(23), U(88), U(40));
-            _shortcutStatus.SetBounds(right, U(70), U(364), U(48));
-            shortcut.Height = U(126);
+            int statusHeight = Math.Max(U(48), TextRenderer.MeasureText(_shortcutStatus.Text, _shortcutStatus.Font,
+                new Size(U(364), int.MaxValue), TextFormatFlags.WordBreak).Height + U(4));
+            _shortcutStatus.SetBounds(right, U(70), U(364), statusHeight);
+            shortcut.Height = U(73) + statusHeight;
         });
         _responsiveLayouts.Add(() =>
         {
-            shortcut.SetBounds(U(1), U(6), preferences.Width - U(2), U(121));
-            appearance.SetBounds(U(1), U(128), preferences.Width - U(2), U(91));
-            divider.SetBounds(U(24), U(127), preferences.Width - U(48), U(1));
-            preferences.Height = U(225);
+            shortcut.SetBounds(U(1), U(6), preferences.Width - U(2), shortcut.Height);
+            appearance.SetBounds(U(1), shortcut.Bottom + U(1), preferences.Width - U(2), U(91));
+            divider.SetBounds(U(24), shortcut.Bottom, preferences.Width - U(48), U(1));
+            preferences.Height = appearance.Bottom + U(6);
         });
 
         var footer = TextLabel("Settings save automatically. Keep this window open to use the shortcut.", 9F, muted: true);

@@ -303,10 +303,12 @@ internal static partial class Program
 
     private sealed class FakeShortcut : IGlobalShortcut
     {
-        public event EventHandler? Pressed { add { } remove { } }
+        public event EventHandler? Pressed;
+        public void Press() => Pressed?.Invoke(this, EventArgs.Empty);
         public bool Conflict;
         public int DisposeCount;
-        public string? TrySet(Keys shortcut) => !InterfaceSettings.IsValidShortcut(shortcut) ? "Invalid shortcut" : Conflict ? "fixture conflict" : null;
+        public string? TrySet(Keys shortcut, Func<string?>? save = null) =>
+            !InterfaceSettings.IsValidShortcut(shortcut) ? "Invalid shortcut" : Conflict ? "fixture conflict" : save?.Invoke();
         public void Dispose() => DisposeCount++;
     }
 

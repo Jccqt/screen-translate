@@ -14,6 +14,7 @@ internal static partial class Program
     private static int Main(string[] args)
     {
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         if (args.Contains("--result-preview"))
@@ -27,6 +28,11 @@ internal static partial class Program
             if (args.Contains("--theme-preview"))
             {
                 RunThemePreview();
+                return 0;
+            }
+            if (args.Contains("--shortcut-preview"))
+            {
+                RunShortcutPreview();
                 return 0;
             }
             if (args.Contains("--models-preview"))
@@ -47,6 +53,8 @@ internal static partial class Program
             TestThemePreferences();
             TestLifetime();
             TestNativeShortcut();
+            TestShortcutValidation();
+            TestTranslationRequestGate().GetAwaiter().GetResult();
             RunUiTests(args.FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "Artifacts"));
             TestMainMessageLoopExit();
             Console.WriteLine($"PASS: {_passed} assertions, including WinForms integration and layout checks.");
@@ -144,6 +152,7 @@ internal static partial class Program
                 form.Size = launchSize;
                 await TestMainInterfaceUi(form, artifactDirectory);
                 await TestThemeUi(artifactDirectory);
+                await TestGlobalShortcutUi(artifactDirectory);
                 await TestOfflineModelsUi(artifactDirectory);
                 await TestOfflineModelRecoveryUi(artifactDirectory);
                 Install(data, "eng");

@@ -11,6 +11,7 @@ public sealed class TranslationResultForm : ThemedForm
         copyText ??= text => Clipboard.SetText(text);
         Text = "Screen Translate · Result";
         Name = "TranslationResult";
+        TopMost = true;
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96, 96);
         StartPosition = FormStartPosition.CenterParent;

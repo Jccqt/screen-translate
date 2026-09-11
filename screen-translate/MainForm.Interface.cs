@@ -41,7 +41,7 @@ public partial class MainForm
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public TranslationReadiness Readiness => TranslationReadiness.Evaluate(
         TranslationCheckPending, TranslationSourceIssue,
-        SelectedSourceLanguageCode, SelectedTargetLanguageCode, _translationScan, RuntimeUnavailable, _shortcutError);
+        SelectedSourceLanguageCode, SelectedTargetLanguageCode, _translationScan, WorkflowUnavailableReason, _shortcutError);
 
     /// <summary>Selection and overlay implementations must use this owner and the work cancellation token.</summary>
     public void ShowTranslationWindow(Form window)
@@ -73,14 +73,7 @@ public partial class MainForm
     {
         _interfacePreferenceError = error;
         UpdateSettingsErrors();
-        _globalShortcut.Pressed += (_, _) =>
-        {
-            if (_lifetime.IsStopped) return;
-            if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
-            Activate();
-            NavigateTo("TranslationReadiness");
-            UpdateReadiness();
-        };
+        _globalShortcut.Pressed += async (_, _) => await HandleTranslationShortcutAsync();
         void RememberColors(Control parent)
         {
             _originalColors[parent] = (parent.BackColor, parent.ForeColor);
@@ -106,7 +99,6 @@ public partial class MainForm
             {
                 font = new Font(spec.Family, spec.Pixels * DeviceDpi / 96F, spec.Style, GraphicsUnit.Pixel);
                 _dpiFonts.Add(key, font);
-                _lifetime.Own(font);
             }
             control.Font = font;
         }
@@ -119,7 +111,7 @@ public partial class MainForm
 
     private void NavigateTo(string name)
     {
-        ShowPage(name is not "TranslationReadiness" and not "SourceLanguage");
+        ShowPage(name is not "TranslationReadiness" and not "SourceLanguage" and not "GlobalShortcut");
         var control = Controls.Find(name, true).Single();
         _page.ScrollControlIntoView(control);
         if (control.CanSelect) control.Select();
@@ -130,6 +122,7 @@ public partial class MainForm
     {
         if (_readinessStatus is null) return;
         var readiness = Readiness;
+        if (_translationFailure is not null) readiness = new(ReadinessState.ActionRequired, _translationFailure);
         string title = readiness.State switch
         {
             ReadinessState.Ready => "Ready",
@@ -141,6 +134,7 @@ public partial class MainForm
         if (readiness.State == ReadinessState.ActionRequired && readiness.Reason == RuntimeUnavailable)
             title = "Translation is not available yet";
         _readinessTitle.Text = source is null || readiness.Reason == RuntimeUnavailable ? title : $"{title} · {source} → {target}";
+        if (_translationFailure is not null) _readinessTitle.Text = "Translation failed";
         _readinessStatus.Text = readiness.Reason;
         _readinessStatus.AccessibleDescription = _readinessTitle.Text + ". " + readiness.Reason;
         _readinessTitle.ForeColor = readiness.State == ReadinessState.ActionRequired
@@ -164,12 +158,13 @@ public partial class MainForm
     {
         _shortcutInput.KeyDown += (_, e) =>
         {
-            if (e.KeyCode == Keys.Tab) return;
+            if (e.KeyCode == Keys.Tab && e.Modifiers is Keys.None or Keys.Shift) return;
             e.SuppressKeyPress = true;
             if (e.KeyCode == Keys.Escape)
             {
                 _pendingShortcut = _interfaceSettings.Shortcut;
                 _shortcutInput.Text = InterfaceSettings.FormatShortcut(_pendingShortcut);
+                _shortcutStatus.Text = "Esc is reserved for cancellation and dismissal. Shortcut edit cancelled.";
                 return;
             }
             if (e.KeyCode is Keys.ControlKey or Keys.ShiftKey or Keys.Menu) return;
@@ -178,15 +173,20 @@ public partial class MainForm
         };
         apply.Click += (_, _) =>
         {
-            string? error = _globalShortcut.TrySet(_pendingShortcut);
+            var candidate = _interfaceSettings with { Shortcut = _pendingShortcut };
+            string? error = InterfaceSettings.ValidateShortcut(_pendingShortcut) ?? _globalShortcut.TrySet(_pendingShortcut,
+                () => _interfaceSettingsStore.Save(candidate) is null ? null : "Could not save the shortcut. Check folder permissions and try again.");
             if (error is not null)
             {
-                _shortcutStatus.Text = error + " Configured: " + InterfaceSettings.FormatShortcut(_interfaceSettings.Shortcut);
+                _shortcutStatus.Text = error + (_shortcutError is null
+                    ? " Still registered: " + InterfaceSettings.FormatShortcut(_interfaceSettings.Shortcut)
+                    : " No shortcut is registered.");
                 return;
             }
-            _interfaceSettings = _interfaceSettings with { Shortcut = _pendingShortcut };
+            _interfaceSettings = candidate;
             _shortcutError = null;
-            SaveInterfaceSettings();
+            _interfacePreferenceError = null;
+            UpdateSettingsErrors();
             ShowShortcutStatus();
             UpdateReadiness();
         };
@@ -197,10 +197,12 @@ public partial class MainForm
         if (_lifetime.IsStopped) return;
         _shortcutError = _globalShortcut.TrySet(_interfaceSettings.Shortcut);
         ShowShortcutStatus();
+        if (_shortcutError is not null) NavigateTo("GlobalShortcut");
         UpdateReadiness();
     }
 
-    private void ShowShortcutStatus() => _shortcutStatus.Text = _shortcutError ??
+    private void ShowShortcutStatus() => _shortcutStatus.Text = _shortcutError is not null
+        ? "Shortcut not registered: " + _shortcutError :
         $"Registered · {InterfaceSettings.FormatShortcut(_interfaceSettings.Shortcut)}";
 
     private void SaveInterfaceSettings()

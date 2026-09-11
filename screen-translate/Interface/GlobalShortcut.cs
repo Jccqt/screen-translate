@@ -6,7 +6,8 @@ namespace screen_translate.Interface;
 public interface IGlobalShortcut : IDisposable
 {
     event EventHandler? Pressed;
-    string? TrySet(Keys shortcut);
+    // Run save only after registration succeeds. Its error must roll back without releasing the old shortcut.
+    string? TrySet(Keys shortcut, Func<string?>? save = null);
 }
 
 /// <summary>A private message window owns registration; replacing a shortcut is transactional.</summary>
@@ -14,15 +15,23 @@ public sealed class GlobalShortcut : NativeWindow, IGlobalShortcut
 {
     private int _registeredId;
     private Keys _shortcut;
+    private uint _registeredMessageData;
     private bool _disposed;
     public event EventHandler? Pressed;
 
-    public string? TrySet(Keys shortcut)
+    public string? TrySet(Keys shortcut, Func<string?>? save = null)
     {
         if (_disposed) return "The application is closing.";
-        if (!InterfaceSettings.IsValidShortcut(shortcut)) return "Use Ctrl or Alt with a letter, number, or function key. Shift is optional.";
-        if (_registeredId != 0 && shortcut == _shortcut) return null;
-        if (Handle == 0) CreateHandle(new CreateParams { Parent = new nint(-3) }); // HWND_MESSAGE
+        if (InterfaceSettings.ValidateShortcut(shortcut) is string error) return error;
+        if (_registeredId != 0 && shortcut == _shortcut) return save?.Invoke();
+        try
+        {
+            if (Handle == 0) CreateHandle(new CreateParams { Parent = new nint(-3) }); // HWND_MESSAGE
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return "Windows could not create the shortcut listener. Try applying the shortcut again.";
+        }
         uint modifiers = 0x4000; // MOD_NOREPEAT
         if ((shortcut & Keys.Alt) != 0) modifiers |= 1;
         if ((shortcut & Keys.Control) != 0) modifiers |= 2;
@@ -30,15 +39,26 @@ public sealed class GlobalShortcut : NativeWindow, IGlobalShortcut
         int nextId = _registeredId == 1 ? 2 : 1;
         if (!RegisterHotKey(Handle, nextId, modifiers, (uint)(shortcut & Keys.KeyCode)))
             return "This shortcut is unavailable or used by another application. Choose a different shortcut.";
+        // Keep the old registration until persistence succeeds; a disk error must not lose a working shortcut.
+        bool saved = false;
+        try
+        {
+            if (save?.Invoke() is string saveError) return saveError;
+            saved = true;
+        }
+        finally { if (!saved) UnregisterHotKey(Handle, nextId); }
         if (_registeredId != 0) UnregisterHotKey(Handle, _registeredId);
         _registeredId = nextId;
         _shortcut = shortcut;
+        _registeredMessageData = ((uint)(shortcut & Keys.KeyCode) << 16) | (modifiers & ~0x4000u);
         return null;
     }
 
     protected override void WndProc(ref Message message)
     {
-        if (message.Msg == 0x0312 && message.WParam == _registeredId && !_disposed)
+        // IDs are reused after replacement; discard queued messages for a previous key/modifier combination.
+        if (message.Msg == 0x0312 && _registeredId != 0 && message.WParam == _registeredId && !_disposed &&
+            ((uint)(nuint)message.LParam & ~0x4000u) == _registeredMessageData)
             Pressed?.Invoke(this, EventArgs.Empty);
         base.WndProc(ref message);
     }

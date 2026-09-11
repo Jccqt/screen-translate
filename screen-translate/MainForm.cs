@@ -51,8 +51,10 @@ public partial class MainForm : Form
 
     public MainForm(SourceLanguageSettingsStore settingsStore, TargetLanguageSettingsStore targetSettingsStore,
         ITranslationModelCatalog? translationCatalog = null, InterfaceSettingsStore? interfaceSettingsStore = null,
-        IGlobalShortcut? globalShortcut = null, IOcrEngine? ocrEngine = null, ISystemThemeSource? systemThemeSource = null)
+        IGlobalShortcut? globalShortcut = null, IOcrEngine? ocrEngine = null, ISystemThemeSource? systemThemeSource = null,
+        ITranslationWorkflow? translationWorkflow = null)
     {
+        _translationWorkflow = translationWorkflow;
         _settingsStore = settingsStore;
         _ocrEngine = ocrEngine ?? new TesseractOcrEngine();
         _sourceSettings = _settingsStore.Load(out string? error);
