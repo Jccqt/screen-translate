@@ -157,6 +157,9 @@ internal static partial class Program
         using (var selector = new RegionSelectorForm(snapshot, topology, geometry))
         {
             Task<RegionCaptureOutcome> pending = selector.SelectAsync(owner, default);
+            InvokeDisplayChange(selector);
+            Check(!pending.IsCompleted,
+                "An unchanged Windows display notification does not cancel reliable selection");
             InvokeMouse(selector, "OnMouseDown", MouseButtons.Left, 520, 300);
             InvokeMouse(selector, "OnMouseMove", MouseButtons.Left, 100, 60);
             Application.DoEvents();
@@ -242,6 +245,14 @@ internal static partial class Program
     private static void InvokeMouse(Control control, string method, MouseButtons button, int x, int y) =>
         typeof(Control).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(control, [new MouseEventArgs(button, 1, x, y, 0)]);
+
+    private static void InvokeDisplayChange(Control control)
+    {
+        object?[] arguments = [Message.Create(control.Handle, 0x007E, 32,
+            (control.Height << 16) | (control.Width & 0xFFFF))];
+        typeof(Control).GetMethod("WndProc", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(control, arguments);
+    }
 
     private static void RunCapturePreview()
     {

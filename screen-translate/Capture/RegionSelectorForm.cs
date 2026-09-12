@@ -134,7 +134,7 @@ internal sealed class RegionSelectorForm : Form
     {
         base.WndProc(ref m);
         if (m.Msg == 0x007E && Visible) // WM_DISPLAYCHANGE
-            Finish(ScreenRegionCaptureService.DisplayChanged());
+            CheckDisplays();
     }
 
     protected override void Dispose(bool disposing)
