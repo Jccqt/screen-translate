@@ -158,11 +158,13 @@ internal static partial class Program
         {
             Task<RegionCaptureOutcome> pending = selector.SelectAsync(owner, default);
             InvokeDisplayChange(selector);
+            // Showing a mouse-capturing window can queue a real pointer move at the runner's
+            // current cursor position. Drain it before injecting the deterministic drag.
+            Application.DoEvents();
             Check(!pending.IsCompleted,
                 "An unchanged Windows display notification does not cancel reliable selection");
             InvokeMouse(selector, "OnMouseDown", MouseButtons.Left, 520, 300);
             InvokeMouse(selector, "OnMouseMove", MouseButtons.Left, 100, 60);
-            Application.DoEvents();
             Check(selector.SelectionBounds == new Rectangle(100, 60, 420, 240) && !pending.IsCompleted,
                 "Selection UI exposes normalized bounds while the pointer is still down");
             Capture(selector, artifacts, "screen-region-selection");
