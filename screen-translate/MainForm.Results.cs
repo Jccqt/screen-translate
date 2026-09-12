@@ -6,12 +6,11 @@ namespace screen_translate;
 
 public partial class MainForm
 {
-    private readonly ITranslationWorkflow? _translationWorkflow;
+    private readonly ITranslationWorkflow _translationWorkflow;
     private readonly TranslationRequestGate _translationRequests = new();
     private object? _activeTranslation;
     private string? _translationFailure;
-    private string? WorkflowUnavailableReason => _translationWorkflow is null ? RuntimeUnavailable
-        : SelectedSourceLanguageCode is null ? "Choose an installed OCR source language."
+    private string? WorkflowUnavailableReason => SelectedSourceLanguageCode is null ? "Choose an installed OCR source language."
         : _translationWorkflow.GetUnavailableReason(CurrentTranslationRequest());
 
     private TranslationRequest CurrentTranslationRequest() => new(SelectedSourceLanguageCode!, SelectedTargetLanguageCode,
@@ -22,9 +21,10 @@ public partial class MainForm
         // Check before readiness or activation: an existing selection/progress window keeps focus and its operation.
         if (_lifetime.IsStopped || _translationRequests.IsBusy) return;
         _translationFailure = null;
+        UpdateReadiness();
         try
         {
-            if (Readiness.State != ReadinessState.Ready || _translationWorkflow is null)
+            if (Readiness.State != ReadinessState.Ready)
             {
                 ShowTranslationSetup();
                 return;
@@ -33,6 +33,12 @@ public partial class MainForm
             await RunTranslationRequestAsync((progress, token) => _translationWorkflow.RunAsync(this, request, progress, token));
         }
         catch (OperationCanceledException) when (WorkCancellationToken.IsCancellationRequested) { }
+        catch (Capture.ScreenCaptureException error)
+        {
+            if (_lifetime.IsStopped) return;
+            _translationFailure = "Screen capture failed: " + error.Message;
+            ShowTranslationSetup();
+        }
         catch (Exception error)
         {
             if (_lifetime.IsStopped) return;

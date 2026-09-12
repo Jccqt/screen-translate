@@ -32,9 +32,6 @@ public partial class MainForm
     private int _typographyDpi;
     private string? _interfacePreferenceError;
 
-    // Replace this blocker only when a runtime can validate and execute the selected configuration.
-    private const string RuntimeUnavailable = "Screen translation isn't available in this build yet. You can still set up your languages and preferences.";
-
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public CancellationToken WorkCancellationToken => _lifetime.Token;
 
@@ -131,10 +128,12 @@ public partial class MainForm
         };
         string? source = (_sourceLanguage.SelectedItem as Ocr.OcrLanguage)?.DisplayName;
         string target = _targetLanguage.SelectedItem?.ToString() ?? SelectedTargetLanguageCode;
-        if (readiness.State == ReadinessState.ActionRequired && readiness.Reason == RuntimeUnavailable)
+        if (readiness.State == ReadinessState.ActionRequired && readiness.Reason.StartsWith("Screen translation isn't available", StringComparison.Ordinal))
             title = "Translation is not available yet";
-        _readinessTitle.Text = source is null || readiness.Reason == RuntimeUnavailable ? title : $"{title} · {source} → {target}";
-        if (_translationFailure is not null) _readinessTitle.Text = "Translation failed";
+        _readinessTitle.Text = source is null || readiness.Reason.StartsWith("Screen translation isn't available", StringComparison.Ordinal) ? title : $"{title} · {source} → {target}";
+        if (_translationFailure is not null) _readinessTitle.Text =
+            _translationFailure.StartsWith("Screen capture failed:", StringComparison.Ordinal)
+                ? "Screen capture failed" : "Translation failed";
         _readinessStatus.Text = readiness.Reason;
         _readinessStatus.AccessibleDescription = _readinessTitle.Text + ". " + readiness.Reason;
         _readinessTitle.ForeColor = readiness.State == ReadinessState.ActionRequired

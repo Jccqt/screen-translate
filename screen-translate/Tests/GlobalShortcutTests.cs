@@ -201,7 +201,7 @@ internal static partial class Program
         main.Close();
         Check(workflow.Token.IsCancellationRequested, "Closing settings cancels the active shortcut workflow");
 
-        using var unavailable = ShortcutFixture(new FakeShortcut(), preferences);
+        using var unavailable = ShortcutFixture(new FakeShortcut(), preferences, new UnavailableWorkflow());
         unavailable.Show();
         await unavailable.RefreshSourceLanguagesAsync();
         await WaitForReadiness(unavailable);
@@ -317,11 +317,20 @@ internal static partial class Program
         public void Fail() => _completion.SetException(new InvalidOperationException("fixture failure"));
     }
 
+    private sealed class UnavailableWorkflow : ITranslationWorkflow
+    {
+        public string? GetUnavailableReason(TranslationRequest request) =>
+            "Screen translation isn't available in this test workflow.";
+        public Task<TranslationResult?> RunAsync(Form owner, TranslationRequest request,
+            IProgress<TranslationStage> progress, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("An unavailable workflow must not run.");
+    }
+
     private static void RunShortcutPreview()
     {
         var preferences = new InterfaceSettingsStore(Path.Combine(Root, "shortcut-preview.json"));
         preferences.Save(new(AppTheme.Light, Keys.Control | Keys.Alt | Keys.F9));
-        using var main = ShortcutFixture(new GlobalShortcut(), preferences);
+        using var main = ShortcutFixture(new GlobalShortcut(), preferences, new UnavailableWorkflow());
         main.Text = "Screen Translate - Shortcut verification";
         Application.Run(main);
     }

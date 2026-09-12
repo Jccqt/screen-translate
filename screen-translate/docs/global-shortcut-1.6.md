@@ -43,12 +43,11 @@ the owning form, a progress reporter, and cancellation. Implementations must
 validate actual engine compatibility and own/dispose capture resources. A null
 result represents cancelled selection.
 
-There is no production region-selection/capture workflow or translation runtime
-in this build. The default application retains its explicit unavailable message.
-The acceptance harness supplies a controlled workflow to verify shortcut
-dispatch, busy-state behavior, cancellation, and result replacement; this does
-not verify real OCR or translation. End-to-end acceptance of those behaviors
-remains pending the production workflow and physical capture/overlay checks.
+Requirement 1.7 subsequently added the production region-selection, desktop
+capture, and Tesseract-recognition workflow. The controlled workflow described
+here remains the 1.6 isolation fixture. A production offline translation backend
+is still unavailable for differing source and target languages; same-language
+OCR uses the production capture path.
 
 ## Verification
 
@@ -79,9 +78,9 @@ the resumed final build (2026-09-11): Screen Translate came forward and switched
 from Models to General. The final build also rejected Ctrl+F12 while preserving
 Ctrl+Alt+F9, restored the configured chord on Escape, and supported Tab followed
 by Enter to apply through the keyboard. The isolated preview closed successfully
-and released its registration. Live selection, processing, and
-overlay replacement cannot yet be physically verified without the runtime.
-Screen geometry and monitor placement are not changed here; real multi-monitor
-and mixed-DPI capture/overlay acceptance must accompany that implementation.
+and released its registration. That 1.6 session did not include live selection,
+processing, or overlay checks. Screen geometry and monitor placement were
+unchanged by 1.6; the later 1.7 capture implementation and its verification are
+documented separately.
 Optional genuine OCR checks require `SCREEN_TRANSLATE_TEST_TESSDATA` and are not
 established by the fixtures used for this requirement.

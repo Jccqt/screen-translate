@@ -25,6 +25,11 @@ internal static partial class Program
         Directory.CreateDirectory(Root);
         try
         {
+            if (args.Contains("--capture-preview"))
+            {
+                RunCapturePreview();
+                return 0;
+            }
             if (args.Contains("--theme-preview"))
             {
                 RunThemePreview();
@@ -55,6 +60,7 @@ internal static partial class Program
             TestNativeShortcut();
             TestShortcutValidation();
             TestTranslationRequestGate().GetAwaiter().GetResult();
+            TestScreenRegionCapture(args.FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "Artifacts")).GetAwaiter().GetResult();
             RunUiTests(args.FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "Artifacts"));
             TestMainMessageLoopExit();
             Console.WriteLine($"PASS: {_passed} assertions, including WinForms integration and layout checks.");
