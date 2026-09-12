@@ -62,4 +62,12 @@ public sealed class TranslationResultForm : ThemedForm
         Controls.Add(layout);
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // Windows 10 2004+ omits this overlay from supported capture APIs. The capture
+        // workflow also removes it and waits for desktop composition before using GDI.
+        _ = CaptureProtection.TryExclude(Handle);
+    }
+
 }

@@ -3,6 +3,7 @@ using screen_translate.Ocr;
 using screen_translate.Settings;
 using screen_translate.Translation;
 using screen_translate.Interface;
+using screen_translate.Capture;
 
 namespace screen_translate;
 
@@ -52,9 +53,9 @@ public partial class MainForm : Form
     public MainForm(SourceLanguageSettingsStore settingsStore, TargetLanguageSettingsStore targetSettingsStore,
         ITranslationModelCatalog? translationCatalog = null, InterfaceSettingsStore? interfaceSettingsStore = null,
         IGlobalShortcut? globalShortcut = null, IOcrEngine? ocrEngine = null, ISystemThemeSource? systemThemeSource = null,
-        ITranslationWorkflow? translationWorkflow = null)
+        ITranslationWorkflow? translationWorkflow = null, IScreenRegionCaptureService? captureService = null,
+        ITranslationEngine? translationEngine = null)
     {
-        _translationWorkflow = translationWorkflow;
         _settingsStore = settingsStore;
         _ocrEngine = ocrEngine ?? new TesseractOcrEngine();
         _sourceSettings = _settingsStore.Load(out string? error);
@@ -62,6 +63,8 @@ public partial class MainForm : Form
         _targetSettingsStore = targetSettingsStore;
         _targetSettings = targetSettingsStore.Load(out string? targetError);
         _translationCatalog = translationCatalog ?? new ArgosTranslationModelCatalog();
+        _translationWorkflow = translationWorkflow ?? new ScreenTranslationWorkflow(
+            _ocrEngine, _translationCatalog, captureService, translationEngine);
         _interfaceSettingsStore = interfaceSettingsStore ?? InterfaceSettingsStore.CreateDefault();
         _interfaceSettings = _interfaceSettingsStore.Load(out string? interfaceError);
         _globalShortcut = globalShortcut ?? new GlobalShortcut();
